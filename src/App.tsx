@@ -105,9 +105,16 @@ export default function App() {
   const [editWorkerOffice, setEditWorkerOffice] = useState<UserProfile['office']>('Misiones');
   const [editWorkerIsAdmin, setEditWorkerIsAdmin] = useState(false);
   
-  // Incidents state with localStorage fallback
+  // Incidents state with localStorage fallback and auto-restoration of any missing initial incidents
   const [incidents, setIncidents] = useState<Incident[]>(() => {
-    return secureLoad<Incident[]>('incident_records_v4', INITIAL_INCIDENTS);
+    const loaded = secureLoad<Incident[]>('incident_records_v4', INITIAL_INCIDENTS);
+    // If some initial incidents are missing (e.g., due to previous aggressive database maintenance), restore them
+    const loadedIds = new Set(loaded.map(i => i.id));
+    const missing = INITIAL_INCIDENTS.filter(i => !loadedIds.has(i.id));
+    if (missing.length > 0) {
+      return [...loaded, ...missing];
+    }
+    return loaded;
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -122,6 +129,8 @@ export default function App() {
   const [activities, setActivities] = useState<Activity[]>(() => {
     return secureLoad<Activity[]>('recent_activity_log_v4', INITIAL_ACTIVITIES);
   });
+
+  const [isSyncingOneDrive, setIsSyncingOneDrive] = useState(false);
 
   // Synchronize state changes with localStorage
   useEffect(() => {
@@ -161,7 +170,7 @@ export default function App() {
   // Database maintenance / optimization: keeping important data and removing unused stale data
   const runDatabaseMaintenance = () => {
     // 1. Keep all pending or in-progress incidents, and all high/critical priority incidents.
-    // 2. For completed incidents of low/medium priority, if they are older than 14 days or we have more than 5, keep only the 5 most recent ones to save storage.
+    // 2. For completed incidents of low/medium priority, if they are older than 180 days or we have more than 40, keep only the 40 most recent ones to save storage.
     // 3. Keep only the 15 most recent activities in the log.
     // This maintains database performance and cleans up unused/stale items automatically!
     
@@ -170,11 +179,11 @@ export default function App() {
       const highOrCritical = prevIncidents.filter(i => i.status === 'Completada' && (i.priority === 'Alta' || i.priority === 'Crítica'));
       const completedLowMedium = prevIncidents.filter(i => i.status === 'Completada' && i.priority !== 'Alta' && i.priority !== 'Crítica');
       
-      // Sort completed low/medium by date, keep only the 5 most recent ones
+      // Sort completed low/medium by date, keep only the 40 most recent ones
       const sortedCompleted = [...completedLowMedium].sort((a, b) => {
         return (b.createdAt || '').localeCompare(a.createdAt || '');
       });
-      const keptCompleted = sortedCompleted.slice(0, 5);
+      const keptCompleted = sortedCompleted.slice(0, 40);
       const optimizedIncidents = [...pendingOrInProcess, ...highOrCritical, ...keptCompleted];
       
       return optimizedIncidents;
@@ -566,6 +575,76 @@ export default function App() {
     setActivities(act => [schedAct, ...act]);
   };
 
+  // Synchronize incidents from public OneDrive Excel spreadsheet
+  const handleSyncOneDrive = async () => {
+    setIsSyncingOneDrive(true);
+    try {
+      const response = await fetch("/api/onedrive/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://1drv.ms/x/c/49BF5E5F60333604/IQDYGHq5VLQFTI646x_UYm_XAXxk4e1EvKbuKtCffCHjNvQ?e=KMjfO9"
+        })
+      });
+      const data = await response.json();
+      if (data && data.success && Array.isArray(data.incidents)) {
+        // Filter out duplicates (e.g. if we already have an incident with the exact same title & floor)
+        const currentTitlesAndFloors = new Set(incidents.map(inc => `${inc.title.toLowerCase()}_${inc.floor.toLowerCase()}`));
+        
+        const newIncidentsToAdd: Incident[] = [];
+        data.incidents.forEach((newInc: any) => {
+          const key = `${newInc.title.toLowerCase()}_${newInc.floor.toLowerCase()}`;
+          if (!currentTitlesAndFloors.has(key)) {
+            newIncidentsToAdd.push({
+              id: newInc.id,
+              title: newInc.title,
+              description: newInc.description,
+              category: newInc.category,
+              floor: newInc.floor,
+              sector: newInc.sector,
+              priority: newInc.priority,
+              status: newInc.status,
+              timestamp: newInc.timestamp,
+              createdAt: newInc.createdAt,
+              completedAt: newInc.completedAt,
+              cost: newInc.cost,
+              actionsTaken: newInc.actionsTaken,
+              assigneeName: newInc.assigneeName
+            });
+          }
+        });
+
+        if (newIncidentsToAdd.length > 0) {
+          setIncidents(prev => [...prev, ...newIncidentsToAdd]);
+
+          // Create activity logs for import
+          const importAct: Activity = {
+            id: `ACT-${Date.now()}`,
+            type: 'status_update',
+            title: 'Sincronización de OneDrive',
+            description: `Se importaron exitosamente ${newIncidentsToAdd.length} incidencias preventivas desde la planilla Excel de OneDrive.`,
+            timestamp: 'Ahora mismo',
+            statusText: 'Sincronizado',
+            category: 'Infraestructura'
+          };
+          setActivities(act => [importAct, ...act]);
+          
+          alert(`¡Sincronización Exitosa!\nSe han cargado ${newIncidentsToAdd.length} nuevas incidencias preventivas desde el Excel de OneDrive:\n\n` + 
+                newIncidentsToAdd.map(i => `• [${i.category}] ${i.title} (${i.floor} - ${i.status})`).join('\n'));
+        } else {
+          alert('Sincronización Finalizada: No se encontraron nuevas incidencias en la planilla de OneDrive. Los datos ya están al día.');
+        }
+      } else {
+        alert('Hubo un error al procesar el archivo Excel de OneDrive. Por favor verifica que el enlace sea accesible.');
+      }
+    } catch (e) {
+      console.error("Error syncing OneDrive:", e);
+      alert('Error de conexión al sincronizar con OneDrive. Intenta nuevamente.');
+    } finally {
+      setIsSyncingOneDrive(false);
+    }
+  };
+
   // Reset database back to seed values
   const handleResetDatabase = () => {
     if (confirm('¿Desea restaurar los datos de simulación por defecto? Esto borrará sus cambios locales.')) {
@@ -858,6 +937,8 @@ export default function App() {
                 onNavigateToTab={setActiveTab}
                 onOpenNewIncident={() => setActiveTab('nuevo')}
                 userProfile={userProfile}
+                onSyncOneDrive={handleSyncOneDrive}
+                isSyncing={isSyncingOneDrive}
               />
             </motion.div>
           )}
@@ -895,6 +976,8 @@ export default function App() {
                 tasks={preventiveTasks}
                 onCompleteTask={handleCompleteTask}
                 onAddTask={handleAddPreventiveTask}
+                onSyncOneDrive={handleSyncOneDrive}
+                isSyncing={isSyncingOneDrive}
               />
             </motion.div>
           )}
@@ -1177,7 +1260,12 @@ export default function App() {
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.2 }}
             >
-              <SoporteView incidents={incidents} userProfile={userProfile} />
+              <SoporteView 
+                incidents={incidents} 
+                userProfile={userProfile} 
+                onSyncOneDrive={handleSyncOneDrive}
+                isSyncing={isSyncingOneDrive}
+              />
             </motion.div>
           )}
 

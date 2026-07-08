@@ -111,11 +111,26 @@ export default function IncidentsView({
     return dateB.localeCompare(dateA);
   });
 
-  // KPI Calculations on the fly for dynamic feel
-  const totalActivasFiltered = incidents.filter(i => i.status !== 'Completada').length;
-  const pendientesCount = incidents.filter(i => i.status === 'Pendiente').length;
-  const enProcesoCount = incidents.filter(i => i.status === 'En Proceso').length;
-  const criticasCount = incidents.filter(i => i.priority === 'Crítica' && i.status !== 'Completada').length;
+  // KPI Calculations on the fly for dynamic feel, based on the search, floor, and category filters
+  const kpiFilteredIncidents = incidents.filter(incident => {
+    const query = searchTerm.toLowerCase();
+    const matchesSearch = 
+      incident.id.toLowerCase().includes(query) ||
+      incident.title.toLowerCase().includes(query) ||
+      incident.description.toLowerCase().includes(query) ||
+      incident.sector.toLowerCase().includes(query);
+
+    const matchesFloor = selectedFloor === 'Todos' || incident.floor === selectedFloor;
+    const matchesCategory = selectedCategory === 'Todas' || incident.category === selectedCategory;
+
+    return matchesSearch && matchesFloor && matchesCategory;
+  });
+
+  const totalActivasFiltered = kpiFilteredIncidents.filter(i => i.status !== 'Completada').length;
+  const pendientesCount = kpiFilteredIncidents.filter(i => i.status === 'Pendiente').length;
+  const enProcesoCount = kpiFilteredIncidents.filter(i => i.status === 'En Proceso').length;
+  const criticasCount = kpiFilteredIncidents.filter(i => i.priority === 'Crítica' && i.status !== 'Completada').length;
+  const completadasCount = kpiFilteredIncidents.filter(i => i.status === 'Completada').length;
 
   return (
     <div className="space-y-6" id="incidents-tab-content">
@@ -224,7 +239,7 @@ export default function IncidentsView({
       </div>
 
       {/* Stats Counter Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" id="incident-stats-small">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4" id="incident-stats-small">
         <div className="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant shadow-xs">
           <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">TOTAL ACTIVAS</p>
           <p className="text-xl font-bold text-primary mt-1">{totalActivasFiltered}</p>
@@ -240,6 +255,10 @@ export default function IncidentsView({
         <div className="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant shadow-xs">
           <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">CRÍTICAS</p>
           <p className="text-xl font-bold text-[#ba1a1a] mt-1">{criticasCount}</p>
+        </div>
+        <div className="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant shadow-xs">
+          <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">COMPLETADAS</p>
+          <p className="text-xl font-bold text-green-700 mt-1">{completadasCount}</p>
         </div>
       </div>
 

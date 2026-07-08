@@ -19,7 +19,8 @@ import {
   Layers,
   Wrench,
   Check,
-  CheckSquare
+  CheckSquare,
+  RefreshCw
 } from 'lucide-react';
 import { PreventiveTask, StatusType } from '../types';
 import { FLOORS, CATEGORIES } from '../data';
@@ -28,12 +29,16 @@ interface PreventiveViewProps {
   tasks: PreventiveTask[];
   onCompleteTask: (id: string) => void;
   onAddTask: (task: Omit<PreventiveTask, 'id'>) => void;
+  onSyncOneDrive?: () => Promise<void>;
+  isSyncing?: boolean;
 }
 
 export default function PreventiveView({
   tasks,
   onCompleteTask,
-  onAddTask
+  onAddTask,
+  onSyncOneDrive,
+  isSyncing = false
 }: PreventiveViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedArea, setSelectedArea] = useState<string>('Todas');
@@ -123,14 +128,26 @@ export default function PreventiveView({
           <h2 className="text-2xl font-bold text-on-surface">Mantenimiento Preventivo</h2>
           <p className="text-sm text-on-surface-variant">Programación, control de rutinas técnicas y calendarios operativos.</p>
         </div>
-        <button
-          onClick={() => setIsScheduleModalOpen(true)}
-          id="btn-schedule-preventive-task"
-          className="bg-primary hover:bg-primary-hover text-white px-5 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150 shadow-sm cursor-pointer"
-        >
-          <Plus size={18} />
-          <span>Programar Tarea</span>
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2.5">
+          {onSyncOneDrive && (
+            <button
+              onClick={onSyncOneDrive}
+              disabled={isSyncing}
+              className={`bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 px-5 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150 shadow-2xs cursor-pointer active:scale-[0.99] ${isSyncing ? 'opacity-70 cursor-wait' : ''}`}
+            >
+              <RefreshCw size={15} className={isSyncing ? 'animate-spin text-[#7a172c]' : 'text-emerald-700'} />
+              <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar OneDrive Excel'}</span>
+            </button>
+          )}
+          <button
+            onClick={() => setIsScheduleModalOpen(true)}
+            id="btn-schedule-preventive-task"
+            className="bg-primary hover:bg-primary-hover text-white px-5 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-150 shadow-sm cursor-pointer"
+          >
+            <Plus size={18} />
+            <span>Programar Tarea</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Grid: Calendar left, stats right */}

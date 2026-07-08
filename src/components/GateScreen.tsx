@@ -36,6 +36,13 @@ export function GateScreen({
   const [activeMode, setActiveMode] = useState<'login' | 'register'>('login');
   const [registerRole, setRegisterRole] = useState<'worker' | 'admin'>('worker');
 
+  // Onboarding / Privacy & Permission Consent Blocker
+  const [privacyAccepted, setPrivacyAccepted] = useState(() => {
+    return localStorage.getItem('device_privacy_consent_accepted') === 'true';
+  });
+  const [consentTermsChecked, setConsentTermsChecked] = useState(false);
+  const [consentDeviceChecked, setConsentDeviceChecked] = useState(false);
+
   // Login inputs
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState(''); // Only required for Admin login
@@ -50,6 +57,62 @@ export function GateScreen({
   const [regOffice, setRegOffice] = useState<UserProfile['office']>('Misiones');
   const [regAdminPassword, setRegAdminPassword] = useState('');
   const [regError, setRegError] = useState('');
+
+  // Google OAuth Simulation States
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleLoadingMsg, setGoogleLoadingMsg] = useState('');
+  const [googleCustomEmail, setGoogleCustomEmail] = useState('');
+  const [googleCustomName, setGoogleCustomName] = useState('');
+  const [showGoogleCustomForm, setShowGoogleCustomForm] = useState(false);
+  const [googleSyncedEmail, setGoogleSyncedEmail] = useState('');
+  const [googleSyncedName, setGoogleSyncedName] = useState('');
+
+  // Handler for when user selects an account in our Google popup
+  const handleSelectGoogleAccount = async (email: string, name: string) => {
+    setIsGoogleLoading(true);
+    setGoogleLoadingMsg('Validando credenciales con los servidores de Google...');
+    
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    setGoogleLoadingMsg('Sincronizando información de perfil...');
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const emailLower = email.toLowerCase().trim();
+
+    // Check if user is already registered in approved or pending lists
+    const foundApproved = approvedWorkers.find(
+      u => u.email.toLowerCase().trim() === emailLower
+    );
+    const foundPending = pendingWorkers.find(
+      u => u.email.toLowerCase().trim() === emailLower
+    );
+    const foundUser = foundApproved || foundPending;
+
+    if (foundUser) {
+      // Direct login!
+      setGoogleLoadingMsg(`¡Bienvenido de vuelta, ${foundUser.name}! Iniciando sesión...`);
+      await new Promise(resolve => setTimeout(resolve, 600));
+      setIsGoogleLoading(false);
+      setShowGoogleModal(false);
+      onLogin(foundUser);
+    } else {
+      // User is not registered yet. Autofill form and switch tab to Register
+      setGoogleLoadingMsg('Autenticación de Google exitosa. Vinculando datos...');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Pre-fill fields
+      setRegEmail(emailLower);
+      setRegName(name);
+      setRegPassword('GoogleLinkedSecureAuth123!'); // Autofill dummy/token password
+      setGoogleSyncedEmail(emailLower);
+      setGoogleSyncedName(name);
+      
+      setIsGoogleLoading(false);
+      setShowGoogleModal(false);
+      setActiveMode('register');
+      setRegError('');
+    }
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -221,38 +284,137 @@ export function GateScreen({
           </p>
         </div>
 
-        {/* Tab Selection */}
-        <div className="flex border-b border-slate-100 bg-slate-50/50 p-1.5 m-4 rounded-xl">
-          <button
-            onClick={() => {
-              setActiveMode('login');
-              setLoginError('');
-            }}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeMode === 'login'
-                ? 'bg-white text-primary shadow-2xs'
-                : 'text-on-surface-variant hover:bg-white/40'
-            }`}
-          >
-            Iniciar Sesión
-          </button>
-          <button
-            onClick={() => {
-              setActiveMode('register');
-              setRegError('');
-            }}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeMode === 'register'
-                ? 'bg-white text-primary shadow-2xs'
-                : 'text-on-surface-variant hover:bg-white/40'
-            }`}
-          >
-            Registrarse
-          </button>
-        </div>
+        {!privacyAccepted ? (
+          <div className="p-6 space-y-4 flex-1 flex flex-col justify-between">
+            <div className="space-y-3.5">
+              <div className="p-3 bg-red-50/70 border border-[#7a172c]/10 rounded-2xl flex items-start gap-2.5 shadow-3xs">
+                <AlertCircle size={16} className="text-primary mt-0.5 shrink-0" />
+                <div className="space-y-0.5">
+                  <h3 className="text-xs font-extrabold text-primary uppercase">Consentimiento Requerido</h3>
+                  <p className="text-[11px] text-slate-600 leading-normal">
+                    Para poder ingresar o registrarse, debe leer y autorizar la política de privacidad de datos y permisos de dispositivo.
+                  </p>
+                </div>
+              </div>
 
-        {/* Active View Container */}
-        <div className="p-6 pt-2 flex-1 flex flex-col justify-between">
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Términos de Privacidad & Permisos</h4>
+                
+                <div className="max-h-[160px] overflow-y-auto border border-slate-100 rounded-xl p-3.5 space-y-3 text-[11px] text-slate-600 bg-slate-50/50 leading-relaxed scrollbar-thin">
+                  <div className="space-y-1">
+                    <p className="font-extrabold text-slate-800">1. Almacenamiento Estricto y Minimizado</p>
+                    <p className="text-slate-500">
+                      La aplicación recopila y almacena **únicamente** su dirección de correo de Google y la contraseña que defina en el registro. No se recopilarán archivos, contactos ni telemetría.
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <p className="font-extrabold text-slate-800">2. Sincronización Segura de Cuentas</p>
+                    <p className="text-slate-500">
+                      Al otorgar este permiso, autoriza a la app a detectar de forma segura las cuentas de Google configuradas en su dispositivo para acelerar el inicio de sesión y evitar errores de tipeo.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="font-extrabold text-slate-800">3. Tratamiento de Seguridad Local</p>
+                    <p className="text-slate-500">
+                      Toda contraseña es procesada localmente mediante algoritmos criptográficos antes de almacenarse, garantizando absoluta privacidad.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="font-extrabold text-slate-800">4. Revocación Directa</p>
+                    <p className="text-slate-500">
+                      Usted retiene soberanía total. Puede revocar este consentimiento y dar de baja su cuenta en cualquier momento, eliminando permanentemente sus datos registrados.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Consent Checkboxes */}
+              <div className="space-y-2 pt-1">
+                <label className="flex items-start gap-2.5 p-2.5 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={consentTermsChecked}
+                    onChange={(e) => setConsentTermsChecked(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-primary focus:ring-primary w-3.5 h-3.5 cursor-pointer accent-primary"
+                  />
+                  <span className="text-[11px] text-slate-600 font-medium leading-tight group-hover:text-slate-900 select-none">
+                    He leído y acepto detalladamente las Políticas de Tratamiento de Datos Minimizado y Privacidad.
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2.5 p-2.5 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={consentDeviceChecked}
+                    onChange={(e) => setConsentDeviceChecked(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-primary focus:ring-primary w-3.5 h-3.5 cursor-pointer accent-primary"
+                  />
+                  <span className="text-[11px] text-slate-600 font-medium leading-tight group-hover:text-slate-900 select-none">
+                    Otorgo permiso de acceso seguro para leer cuentas de Google vinculadas en este dispositivo.
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={!consentTermsChecked || !consentDeviceChecked}
+                onClick={() => {
+                  localStorage.setItem('device_privacy_consent_accepted', 'true');
+                  setPrivacyAccepted(true);
+                }}
+                className={`w-full py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-3xs ${
+                  consentTermsChecked && consentDeviceChecked
+                    ? 'bg-primary hover:bg-primary-hover text-white active:scale-99'
+                    : 'bg-slate-100 text-slate-400 border border-slate-200/50 cursor-not-allowed'
+                }`}
+              >
+                <span>Aceptar Políticas y Habilitar Acceso</span>
+                <ArrowRight size={13} />
+              </button>
+              <p className="text-[9px] text-center text-slate-400 mt-2 font-medium">
+                Al confirmar, se activará la sincronización segura en el portal.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Tab Selection */}
+            <div className="flex border-b border-slate-100 bg-slate-50/50 p-1.5 m-4 rounded-xl">
+              <button
+                onClick={() => {
+                  setActiveMode('login');
+                  setLoginError('');
+                }}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeMode === 'login'
+                    ? 'bg-white text-primary shadow-2xs'
+                    : 'text-on-surface-variant hover:bg-white/40'
+                }`}
+              >
+                Iniciar Sesión
+              </button>
+              <button
+                onClick={() => {
+                  setActiveMode('register');
+                  setRegError('');
+                }}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeMode === 'register'
+                    ? 'bg-white text-primary shadow-2xs'
+                    : 'text-on-surface-variant hover:bg-white/40'
+                }`}
+              >
+                Registrarse
+              </button>
+            </div>
+
+            {/* Active View Container */}
+            <div className="p-6 pt-2 flex-1 flex flex-col justify-between">
           <AnimatePresence mode="wait">
             {activeMode === 'login' ? (
               <motion.form
@@ -321,7 +483,25 @@ export function GateScreen({
                   <ArrowRight size={14} />
                 </button>
 
+                <div className="relative flex py-1.5 items-center">
+                  <div className="flex-grow border-t border-slate-100"></div>
+                  <span className="flex-shrink mx-3 text-[9px] text-slate-400 font-extrabold uppercase tracking-widest">O continuar con</span>
+                  <div className="flex-grow border-t border-slate-100"></div>
+                </div>
 
+                <button
+                  type="button"
+                  onClick={() => setShowGoogleModal(true)}
+                  className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/85 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-3xs cursor-pointer active:scale-99"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+                  </svg>
+                  <span>Continuar con Google</span>
+                </button>
               </motion.form>
             ) : (
               <motion.form
@@ -339,6 +519,16 @@ export function GateScreen({
                     Seleccione su tipo de registro correspondiente. El personal de oficina requiere aprobación.
                   </p>
                 </div>
+
+                {googleSyncedEmail && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200/50 rounded-xl flex items-center gap-2.5 text-[11px] text-emerald-800 shadow-3xs animate-pulse">
+                    <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-black text-xs shrink-0">✓</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-extrabold text-emerald-900 text-xs">Sincronizado con Google</p>
+                      <p className="text-[10px] text-emerald-700 font-mono truncate">{googleSyncedEmail}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Role Switcher */}
                 <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl text-xs">
@@ -434,29 +624,34 @@ export function GateScreen({
                       <input
                         type="email"
                         required
+                        disabled={!!googleSyncedEmail}
                         value={regEmail}
                         onChange={(e) => setRegEmail(e.target.value)}
                         placeholder="Su correo electrónico"
-                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-outline-variant rounded-xl focus:outline-none focus:ring-1 focus:ring-primary"
+                        className={`w-full pl-9 pr-3 py-1.5 text-xs rounded-xl focus:outline-none focus:ring-1 focus:ring-primary ${
+                          googleSyncedEmail ? 'bg-slate-100 border-slate-200 text-slate-500 font-semibold cursor-not-allowed font-mono' : 'bg-white border border-outline-variant'
+                        }`}
                       />
                     </div>
                   </div>
 
                   {/* Password */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider block">Crear Contraseña Propia</label>
-                    <div className="relative">
-                      <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
-                      <input
-                        type="password"
-                        required
-                        value={regPassword}
-                        onChange={(e) => setRegPassword(e.target.value)}
-                        placeholder="Mínimo 6 caracteres"
-                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-outline-variant rounded-xl focus:outline-none focus:ring-1 focus:ring-primary font-mono"
-                      />
+                  {!googleSyncedEmail && (
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider block">Crear Contraseña Propia</label>
+                      <div className="relative">
+                        <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
+                        <input
+                          type="password"
+                          required
+                          value={regPassword}
+                          onChange={(e) => setRegPassword(e.target.value)}
+                          placeholder="Mínimo 6 caracteres"
+                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-outline-variant rounded-xl focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Office / Area */}
                   <div className="space-y-1">
@@ -513,14 +708,187 @@ export function GateScreen({
                 >
                   <UserCheck size={14} />
                   <span>
-                    {registerRole === 'admin' ? 'Registrarse como Administrador' : 'Solicitar Registro de Oficina'}
+                    {googleSyncedEmail 
+                      ? 'Finalizar Registro con Google' 
+                      : registerRole === 'admin' 
+                        ? 'Registrarse como Administrador' 
+                        : 'Solicitar Registro de Oficina'}
                   </span>
                 </button>
+
+                {!googleSyncedEmail && (
+                  <>
+                    <div className="relative flex py-1.5 items-center">
+                      <div className="flex-grow border-t border-slate-100"></div>
+                      <span className="flex-shrink mx-3 text-[9px] text-slate-400 font-extrabold uppercase tracking-widest">O registrarse con</span>
+                      <div className="flex-grow border-t border-slate-100"></div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowGoogleModal(true)}
+                      className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/85 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-3xs cursor-pointer active:scale-99"
+                    >
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+                      </svg>
+                      <span>Vincular cuenta de Google</span>
+                    </button>
+                  </>
+                )}
               </motion.form>
             )}
           </AnimatePresence>
         </div>
-      </div>
+      </>
+    )}
+  </div>
+
+      {/* Google Account Chooser Overlay Modal */}
+      <AnimatePresence>
+        {showGoogleModal && (
+          <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="bg-white rounded-2xl w-full max-w-sm border border-slate-200 shadow-2xl overflow-hidden font-sans text-slate-800"
+            >
+              {/* Header */}
+              <div className="p-6 pb-4 text-center border-b border-slate-100 relative">
+                <button 
+                  onClick={() => {
+                    setShowGoogleModal(false);
+                    setShowGoogleCustomForm(false);
+                  }}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 font-bold text-sm w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+                  type="button"
+                >
+                  ✕
+                </button>
+                <div className="flex justify-center mb-2.5">
+                  <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+                  </svg>
+                </div>
+                <h3 className="text-base font-black tracking-tight text-slate-800">Acceder con Google</h3>
+                <p className="text-[10px] text-slate-500 mt-1">para continuar en <span className="font-bold text-[#7a172c]">Cita con la Vida</span></p>
+              </div>
+
+              {/* Loading State Overlay */}
+              {isGoogleLoading ? (
+                <div className="p-8 text-center space-y-4 min-h-[220px] flex flex-col justify-center items-center">
+                  <div className="w-12 h-12 relative flex items-center justify-center">
+                    <div className="absolute inset-0 border-4 border-slate-100 rounded-full" />
+                    <div className="absolute inset-0 border-4 border-t-blue-500 border-r-green-500 border-b-yellow-500 border-l-red-500 rounded-full animate-spin" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-600 animate-pulse px-4">{googleLoadingMsg}</p>
+                </div>
+              ) : (
+                <div className="p-5 space-y-3.5 max-h-[300px] overflow-y-auto">
+                  {!showGoogleCustomForm ? (
+                    <>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">Cuentas detectadas en este dispositivo</p>
+                      
+                      {/* suggested personalized account based on metadata! */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectGoogleAccount('matymoya18@gmail.com', 'Matías Moya')}
+                        className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all text-left group cursor-pointer"
+                      >
+                        <div className="w-8.5 h-8.5 rounded-full bg-gradient-to-tr from-[#7a172c] to-[#9e1b34] text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
+                          M
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-extrabold text-slate-800 truncate group-hover:text-primary">Matías Moya</p>
+                          <p className="text-[10px] text-slate-400 font-mono truncate">matymoya18@gmail.com</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-100 block text-center">Detectada</span>
+                          <span className="text-[8px] text-slate-400 font-bold block mt-0.5 text-center uppercase tracking-wider font-mono">Principal</span>
+                        </div>
+                      </button>
+
+                      <div className="border-t border-slate-100 my-1.5" />
+
+                      {/* use different account option */}
+                      <button
+                        type="button"
+                        onClick={() => setShowGoogleCustomForm(true)}
+                        className="w-full flex items-center justify-center gap-2 py-2 px-4 hover:bg-slate-50 text-xs font-bold text-primary rounded-xl border border-dashed border-primary/20 transition-all cursor-pointer"
+                      >
+                        <span>Vincular otra cuenta de Google</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="space-y-3 p-0.5">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ingresa tus datos de Google</p>
+                      
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Nombre Completo</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ej. Juan Pérez"
+                          value={googleCustomName}
+                          onChange={e => setGoogleCustomName(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Correo de Google (Gmail)</label>
+                        <input
+                          type="email"
+                          required
+                          placeholder="usuario@gmail.com"
+                          value={googleCustomEmail}
+                          onChange={e => setGoogleCustomEmail(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowGoogleCustomForm(false)}
+                          className="flex-1 py-2 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all text-slate-600 cursor-pointer"
+                        >
+                          Atrás
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!googleCustomEmail.trim() || !googleCustomName.trim()) {
+                              alert('Por favor ingresa tu nombre y correo.');
+                              return;
+                            }
+                            handleSelectGoogleAccount(googleCustomEmail, googleCustomName);
+                          }}
+                          className="flex-grow py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                        >
+                          Vincular Cuenta
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="bg-slate-50 p-4 border-t border-slate-100 text-[9px] text-slate-400 leading-relaxed text-center">
+                Para continuar, Google compartirá tu nombre, dirección de correo electrónico, idioma y foto de perfil con <span className="font-semibold text-slate-500">Cita con la Vida</span>.
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

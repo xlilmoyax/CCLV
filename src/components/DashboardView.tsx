@@ -12,7 +12,8 @@ import {
   ChevronRight,
   TrendingUp,
   Sliders,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import { Incident, PreventiveTask, Activity, UserProfile } from '../types';
 
@@ -23,6 +24,8 @@ interface DashboardViewProps {
   onNavigateToTab: (tab: string) => void;
   onOpenNewIncident: () => void;
   userProfile?: UserProfile | null;
+  onSyncOneDrive?: () => void;
+  isSyncing?: boolean;
 }
 
 export default function DashboardView({
@@ -31,7 +34,9 @@ export default function DashboardView({
   activities,
   onNavigateToTab,
   onOpenNewIncident,
-  userProfile
+  userProfile,
+  onSyncOneDrive,
+  isSyncing
 }: DashboardViewProps) {
   const [selectedPisoDays, setSelectedPisoDays] = useState<'7' | '30'>('30');
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
@@ -48,17 +53,7 @@ export default function DashboardView({
     return acc;
   }, {} as Record<string, number>);
 
-  // Default values for missing categories to ensure beauty
-  const finalCategoryCounts = {
-    Electricidad: categoryCounts['Electricidad'] || 4,
-    Plomería: categoryCounts['Plomería'] || 3,
-    Climatización: categoryCounts['Climatización'] || 3,
-    Limpieza: categoryCounts['Limpieza'] || 1,
-    Seguridad: categoryCounts['Seguridad'] || 1,
-    Infraestructura: categoryCounts['Infraestructura'] || 2,
-    IT: categoryCounts['IT'] || 1,
-  };
-
+  const finalCategoryCounts = { ...categoryCounts };
   const totalCatSum = Object.values(finalCategoryCounts).reduce((a, b) => a + b, 0) || 1;
 
   // Floor distribution
@@ -67,35 +62,41 @@ export default function DashboardView({
     return acc;
   }, {} as Record<string, number>);
 
-  const floorsOrdered = ['Subsuelo', 'Planta Baja', '1° Piso', '2° Piso', '3° Piso', '4° Piso', 'Terraza'];
-  const floorAbbrev: Record<string, string> = {
-    'Subsuelo': 'SS',
-    'Planta Baja': 'PB',
-    '1° Piso': '1°',
-    '2° Piso': '2°',
-    '3° Piso': '3°',
-    '4° Piso': '4°',
-    'Terraza': 'TR'
-  };
+  const floorsOrdered = [
+    { key: 'Subsuelo', abbrev: 'SS' },
+    { key: 'Planta Baja', abbrev: 'PB' },
+    { key: 'Primero', abbrev: '1°' },
+    { key: 'Segundo', abbrev: '2°' },
+    { key: 'Tercero', abbrev: '3°' },
+    { key: 'Cuarto', abbrev: '4°' },
+    { key: 'Quinto', abbrev: '5°' },
+    { key: 'Sexto', abbrev: '6°' },
+    { key: 'Terraza', abbrev: 'TR' }
+  ];
 
-  // Ensure realistic non-zero bars for empty floors
   const finalFloorCounts = floorsOrdered.map(floor => ({
-    full: floor,
-    abbrev: floorAbbrev[floor] || floor,
-    count: floorCounts[floor] || (floor === '2° Piso' ? 4 : floor === '4° Piso' ? 3 : floor === 'Planta Baja' ? 2 : 1)
+    full: floor.key,
+    abbrev: floor.abbrev,
+    count: floorCounts[floor.key] || 0
   }));
 
   const maxFloorCount = Math.max(...finalFloorCounts.map(f => f.count), 1);
 
   // Color map for categories
   const categoryColors: Record<string, { fill: string; dot: string }> = {
-    Electricidad: { fill: '#555b85', dot: 'bg-primary' },
-    Plomería: { fill: '#6c5d25', dot: 'bg-tertiary' },
-    Climatización: { fill: '#802f2f', dot: 'bg-red-800' },
-    Limpieza: { fill: '#2a5c43', dot: 'bg-green-700' },
-    Seguridad: { fill: '#5c5b2a', dot: 'bg-amber-800' },
-    Infraestructura: { fill: '#3d4b6c', dot: 'bg-indigo-900' },
-    IT: { fill: '#4d2a5c', dot: 'bg-purple-900' },
+    Electricidad: { fill: '#3b82f6', dot: 'bg-blue-500' },
+    Plomería: { fill: '#eab308', dot: 'bg-yellow-500' },
+    Climatización: { fill: '#ef4444', dot: 'bg-red-500' },
+    Limpieza: { fill: '#10b981', dot: 'bg-green-500' },
+    Seguridad: { fill: '#f97316', dot: 'bg-orange-500' },
+    Infraestructura: { fill: '#6366f1', dot: 'bg-indigo-500' },
+    IT: { fill: '#8b5cf6', dot: 'bg-purple-500' },
+    Cerrajería: { fill: '#14b8a6', dot: 'bg-teal-500' },
+    Mobiliario: { fill: '#ec4899', dot: 'bg-pink-500' },
+    Pintura: { fill: '#84cc16', dot: 'bg-lime-500' },
+    Aberturas: { fill: '#a855f7', dot: 'bg-purple-500' },
+    Ascensores: { fill: '#64748b', dot: 'bg-slate-500' },
+    Herrería: { fill: '#475569', dot: 'bg-slate-600' },
   };
 
   // Generate SVG donut parameters
@@ -131,14 +132,26 @@ export default function DashboardView({
               Consulte el historial de incidencias registradas en la institución y reporte nuevos eventos técnicos.
             </p>
           </div>
-          <button
-            onClick={onOpenNewIncident}
-            id="btn-report-inc-banner-worker"
-            className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors duration-150 shadow-sm cursor-pointer"
-          >
-            <Plus size={18} />
-            <span>Reportar Nueva Incidencia</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {onSyncOneDrive && (
+              <button
+                onClick={onSyncOneDrive}
+                disabled={isSyncing}
+                className={`bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors duration-150 shadow-2xs cursor-pointer active:scale-[0.99] ${isSyncing ? 'opacity-70 cursor-wait' : ''}`}
+              >
+                <RefreshCw size={15} className={isSyncing ? 'animate-spin text-[#7a172c]' : 'text-emerald-700'} />
+                <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar OneDrive'}</span>
+              </button>
+            )}
+            <button
+              onClick={onOpenNewIncident}
+              id="btn-report-inc-banner-worker"
+              className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors duration-150 shadow-sm cursor-pointer"
+            >
+              <Plus size={18} />
+              <span>Reportar Nueva Incidencia</span>
+            </button>
+          </div>
         </div>
 
         {/* Informative Grid */}
@@ -288,14 +301,26 @@ export default function DashboardView({
             Visualiza el estado operativo, indicadores clave y actividades recientes de la institución.
           </p>
         </div>
-        <button
-          onClick={onOpenNewIncident}
-          id="btn-report-inc-banner"
-          className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors duration-150 shadow-sm cursor-pointer"
-        >
-          <Plus size={18} />
-          <span>Nueva Incidencia</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {onSyncOneDrive && (
+            <button
+              onClick={onSyncOneDrive}
+              disabled={isSyncing}
+              className={`bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors duration-150 shadow-2xs cursor-pointer active:scale-[0.99] ${isSyncing ? 'opacity-70 cursor-wait' : ''}`}
+            >
+              <RefreshCw size={15} className={isSyncing ? 'animate-spin text-[#7a172c]' : 'text-emerald-700'} />
+              <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar OneDrive'}</span>
+            </button>
+          )}
+          <button
+            onClick={onOpenNewIncident}
+            id="btn-report-inc-banner"
+            className="bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors duration-150 shadow-sm cursor-pointer"
+          >
+            <Plus size={18} />
+            <span>Nueva Incidencia</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -306,7 +331,7 @@ export default function DashboardView({
           className="bg-surface-container-lowest p-6 rounded-xl border border-outline-variant shadow-sm flex flex-col justify-between"
         >
           <div>
-            <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Total Activas</p>
+            <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Total General</p>
             <h3 className="text-3xl font-bold text-primary mt-1">{totalIncidentsCount}</h3>
           </div>
           <div className="mt-4 flex items-center gap-1.5 text-xs text-green-700 font-medium">
@@ -352,7 +377,7 @@ export default function DashboardView({
         >
           <div>
             <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">Finalizadas</p>
-            <h3 className="text-3xl font-bold text-green-700 mt-1">{completedCount + 11}</h3>
+            <h3 className="text-3xl font-bold text-green-700 mt-1">{completedCount}</h3>
           </div>
           <div className="mt-4 flex items-center gap-1.5 text-xs text-green-700 font-medium">
             <CheckCircle size={14} />

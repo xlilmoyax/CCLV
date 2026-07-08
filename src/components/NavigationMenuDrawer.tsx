@@ -49,6 +49,7 @@ export default function NavigationMenuDrawer({
   
   // Tabs: 'menu', 'perfil' (which resolves to profile info or register) or 'contacto'
   const [activeMenuTab, setActiveMenuTab] = useState<'menu' | 'perfil' | 'contacto'>('menu');
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showSessionExitView, setShowSessionExitView] = useState(false);
 
@@ -718,12 +719,13 @@ export default function NavigationMenuDrawer({
                     <div className="p-3 bg-slate-50 border border-outline-variant rounded-xl">
                       <p className="text-[9px] font-bold text-outline uppercase">Oficina Central</p>
                       <p className="text-xs font-extrabold text-on-surface mt-0.5">Soporte IT</p>
-                      <p className="text-[10px] text-on-surface-variant font-mono mt-1">+54 9 376 412345</p>
+                      <p className="text-[10px] text-on-surface-variant font-mono mt-1">3516851403</p>
+                      <p className="text-[10px] text-on-surface-variant font-mono mt-0.5">3516798276</p>
                     </div>
                     <div className="p-3 bg-slate-50 border border-outline-variant rounded-xl">
                       <p className="text-[9px] font-bold text-outline uppercase">Email Corporativo</p>
                       <p className="text-xs font-extrabold text-on-surface mt-0.5">Mantenimiento</p>
-                      <p className="text-[10px] text-on-surface-variant font-mono mt-1">maint@cita.org</p>
+                      <p className="text-[10px] text-on-surface-variant font-mono mt-1 break-all">edificiocclv25@gmail.com</p>
                     </div>
                   </div>
                 </div>
@@ -739,9 +741,94 @@ export default function NavigationMenuDrawer({
             <p className="text-[10px] text-on-surface-variant font-medium">
               Mantenimiento — Cita con la Vida &copy; 2026
             </p>
+            <button
+              type="button"
+              onClick={() => setShowPoliciesModal(true)}
+              className="text-[9px] text-on-surface-variant/50 hover:text-primary transition-colors hover:underline mt-1.5 cursor-pointer block mx-auto"
+            >
+              Permisos de la app
+            </button>
           </div>
         </motion.div>
       </div>
+
+      {/* Detailed read-only policies modal */}
+      {showPoliciesModal && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-md border border-slate-200 shadow-2xl overflow-hidden font-sans text-slate-800 flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase">Permisos de la app</h3>
+                <p className="text-[10px] text-slate-400 font-mono mt-0.5">Cita con la Vida — Control de Accesos</p>
+              </div>
+              <button
+                onClick={() => setShowPoliciesModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-600">
+              <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
+                <p className="font-extrabold text-[#7a172c] uppercase text-[9px] tracking-wider">Compromiso de Privacidad</p>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Valoramos absolutamente la seguridad y soberanía de los datos de nuestros colaboradores del edificio. Esta aplicación implementa políticas rigurosas de seguridad de datos.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">1. Principio de Minimización de Datos</h4>
+                <p>
+                  De acuerdo con las normativas vigentes, esta plataforma recopila y almacena únicamente dos datos esenciales para validar su identidad en el sistema:
+                </p>
+                <ul className="list-disc pl-4 space-y-1 text-[11px]">
+                  <li>Su dirección de <strong className="text-slate-700">correo electrónico provista por Google</strong>.</li>
+                  <li>La <strong className="text-slate-700">contraseña cifrada</strong> que usted define durante el registro.</li>
+                </ul>
+                <p>
+                  No almacenamos ningún otro dato personal de su cuenta de Google, contactos, archivos, ubicación ni telemetría del dispositivo.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">2. Permisos y Consentimiento de Dispositivo</h4>
+                <p>
+                  Al activar el inicio de sesión o vinculación de cuenta, usted otorga permiso de acceso seguro para que la aplicación consulte las cuentas de Google configuradas en su dispositivo con el fin de simplificar el llenado del formulario de registro de forma automatizada y sin errores.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">3. Cifrado y Tratamiento de Claves</h4>
+                <p>
+                  La contraseña ingresada es procesada localmente mediante funciones criptográficas irreversibles de última generación (hashing seguro) antes de ser guardada. Ningún miembro de la administración del edificio ni terceros pueden descifrar o conocer su clave de acceso.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">4. Revocación de Permisos y Eliminación</h4>
+                <p>
+                  Usted mantiene el control absoluto. En cualquier momento puede desactivar los permisos o solicitar la eliminación total de su cuenta registrada desde este mismo menú de perfil. El borrado de sus datos es inmediato, definitivo y sin posibilidad de recuperación.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPoliciesModal(false)}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all shadow-3xs cursor-pointer"
+              >
+                Cerrar Políticas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,14 +13,26 @@ import {
   Wrench,
   Download,
   FileText,
-  Compass
+  Compass,
+  FileSpreadsheet,
+  FileEdit,
+  History,
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 import { Incident, UserProfile } from '../types';
+import { secureSave, secureLoad } from '../utils/security';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+}
+
+interface ChatSession {
+  id: string;
+  dateLabel: string;
+  messages: ChatMessage[];
 }
 
 const SUGGESTIONS = [
@@ -33,19 +45,296 @@ const SUGGESTIONS = [
 interface SoporteViewProps {
   incidents: Incident[];
   userProfile?: UserProfile | null;
+  onSyncOneDrive?: () => void;
+  isSyncing?: boolean;
 }
 
-export default function SoporteView({ incidents, userProfile }: SoporteViewProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: '¡Hola! Soy **Eddie**, tu asistente inteligente de soporte técnico para el edificio de **Cita con la Vida**.\n\nTe puedo guiar sobre **cómo reportar incidencias**, qué sectores existen por cada piso o consultar el **estado de incidencias viejas o actuales** (cuándo se registraron, su estado y si es necesario resolverlas).\n\n¿En qué te puedo colaborar hoy? Puedes escribir tu consulta o usar alguna de las sugerencias rápidas abajo.',
-      timestamp: new Date()
+interface EddieAvatarProps {
+  expression: 'neutral' | 'thinking' | 'happy' | 'surprised' | 'worried';
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export function EddieAvatar({ expression, size = 'md' }: EddieAvatarProps) {
+  const isLg = size === 'lg';
+  const isSm = size === 'sm';
+  
+  // Outer dimensions
+  const containerClasses = isSm 
+    ? "w-8 h-8" 
+    : isLg 
+      ? "w-16 h-16" 
+      : "w-11 h-11";
+
+  // Ear style: Chappie has two characteristic blocky antenna ears at the top/sides
+  // We render them as absolute elements sticking out of the head!
+  return (
+    <div className={`relative ${containerClasses} flex items-center justify-center select-none shrink-0`}>
+      {/* Left Chappie Ear */}
+      <motion.div 
+        className="absolute bg-slate-600 rounded-xs origin-bottom-right"
+        style={{
+          width: isSm ? '2px' : '4px',
+          height: isSm ? '6px' : '11px',
+          left: isSm ? '1px' : '2px',
+          top: isSm ? '0px' : '1px',
+          transform: 'rotate(-25deg)'
+        }}
+        animate={expression === 'thinking' ? {
+          rotate: [-25, -15, -25],
+        } : expression === 'surprised' ? {
+          rotate: [-35, -35],
+        } : { rotate: -25 }}
+        transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+      />
+      
+      {/* Right Chappie Ear */}
+      <motion.div 
+        className="absolute bg-slate-600 rounded-xs origin-bottom-left"
+        style={{
+          width: isSm ? '2px' : '4px',
+          height: isSm ? '6px' : '11px',
+          right: isSm ? '1px' : '2px',
+          top: isSm ? '0px' : '1px',
+          transform: 'rotate(25deg)'
+        }}
+        animate={expression === 'thinking' ? {
+          rotate: [25, 15, 25],
+        } : expression === 'surprised' ? {
+          rotate: [35, 35],
+        } : { rotate: 25 }}
+        transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut", delay: 0.2 }}
+      />
+
+      {/* Head Chassis */}
+      <div className="w-full h-full bg-slate-800 rounded-xl flex items-center justify-center p-[3px] relative shadow-[0_4px_12px_rgba(30,41,59,0.25)] border border-slate-700 overflow-hidden">
+        {/* Face Screen */}
+        <div className="w-full h-full bg-slate-950 rounded-lg flex flex-col items-center justify-center relative overflow-hidden">
+          {/* Subtle horizontal monitor scanlines */}
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20" />
+          
+          {/* Eye Screen Content based on expression */}
+          <div className="flex gap-1 items-center justify-center relative z-10">
+            {expression === 'neutral' && (
+              <>
+                {/* Rectangular led cyan bars */}
+                <span className="w-2 h-[3px] bg-cyan-400 rounded-full shadow-[0_0_6px_#22d3ee]" />
+                <span className="w-2 h-[3px] bg-cyan-400 rounded-full shadow-[0_0_6px_#22d3ee]" />
+              </>
+            )}
+            {expression === 'thinking' && (
+              <>
+                {/* Glowing blinking amber bars */}
+                <motion.span 
+                  className="w-1.5 h-[3px] bg-amber-400 rounded-full shadow-[0_0_6px_#fbbf24]"
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ repeat: Infinity, duration: 0.8 }}
+                />
+                <motion.span 
+                  className="w-1.5 h-[3px] bg-amber-400 rounded-full shadow-[0_0_6px_#fbbf24]"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 0.8 }}
+                />
+              </>
+            )}
+            {expression === 'happy' && (
+              <>
+                {/* Cute inverted V eyes ^^ */}
+                <div className="flex gap-1.5">
+                  <div className="w-1.5 h-1.5 relative flex items-center justify-center">
+                    <span className="absolute w-1.5 h-1.5 border-t-2 border-x-2 border-emerald-400 rounded-full rotate-45 transform -translate-y-[1px] shadow-[0_0_4px_#34d399]" />
+                  </div>
+                  <div className="w-1.5 h-1.5 relative flex items-center justify-center">
+                    <span className="absolute w-1.5 h-1.5 border-t-2 border-x-2 border-emerald-400 rounded-full rotate-45 transform -translate-y-[1px] shadow-[0_0_4px_#34d399]" />
+                  </div>
+                </div>
+              </>
+            )}
+            {expression === 'surprised' && (
+              <>
+                {/* Wide circular neon pink eyes */}
+                <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shadow-[0_0_6px_#f43f5e] animate-pulse" />
+                <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shadow-[0_0_6px_#f43f5e] animate-pulse" />
+              </>
+            )}
+            {expression === 'worried' && (
+              <>
+                {/* Slanted downward sad eyes */}
+                <div className="w-1.5 h-[3px] bg-blue-400 rounded-full shadow-[0_0_6px_#60a5fa] rotate-12" />
+                <div className="w-1.5 h-[3px] bg-blue-400 rounded-full shadow-[0_0_6px_#60a5fa] -rotate-12" />
+              </>
+            )}
+          </div>
+
+          {/* LED mouth or bar indicator below */}
+          {expression === 'happy' ? (
+            <span className="w-2.5 h-[2px] bg-emerald-400 rounded-full mt-1 shadow-[0_0_4px_#34d399]" />
+          ) : expression === 'thinking' ? (
+            <motion.span 
+              className="w-2 h-[2px] bg-amber-400 rounded-full mt-1 shadow-[0_0_4px_#fbbf24]"
+              animate={{ width: [4, 8, 4] }}
+              transition={{ repeat: Infinity, duration: 1.2 }}
+            />
+          ) : expression === 'surprised' ? (
+            <span className="w-1 h-1 bg-rose-500 rounded-full mt-1 shadow-[0_0_4px_#f43f5e]" />
+          ) : expression === 'worried' ? (
+            <span className="w-2 h-[2px] bg-blue-400 rounded-full mt-1 shadow-[0_0_4px_#60a5fa]" />
+          ) : (
+            <span className="w-3 h-[2px] bg-cyan-500 rounded-full mt-1 opacity-60 shadow-[0_0_4px_#06b6d4]" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const WELCOME_MESSAGE_CONTENT = '¡Hola! Soy **Eddie**, tu asistente inteligente de soporte técnico para el edificio de **Cita con la Vida**.\n\nTe puedo guiar sobre **cómo reportar incidencias**, qué sectores existen por cada piso o consultar el **estado de incidencias viejas o actuales** (cuándo se registraron, su estado y si es necesario resolverlas).\n\n¿En qué te puedo colaborar hoy? Puedes escribir tu consulta o usar alguna de las sugerencias rápidas abajo.';
+
+const getCurrentDateKey = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`; // e.g. "2026-07-08"
+};
+
+const formatDateLabel = (dateStr: string) => {
+  try {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day);
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+    if (dateStr === todayKey) {
+      return "Conversación de Hoy";
+    } else if (dateStr === yesterdayKey) {
+      return "Conversación de Ayer";
     }
-  ]);
+
+    return dateObj.toLocaleDateString('es-AR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  } catch (e) {
+    return dateStr;
+  }
+};
+
+export default function SoporteView({ 
+  incidents, 
+  userProfile,
+  onSyncOneDrive,
+  isSyncing
+}: SoporteViewProps) {
+  const [expression, setExpression] = useState<'neutral' | 'thinking' | 'happy' | 'surprised' | 'worried'>('neutral');
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const messages = activeSession ? activeSession.messages : [];
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Synchronize state changes with user-specific sessions in localStorage
+  const setMessages = (newMessagesOrFn: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+    setSessions(prevSessions => {
+      const email = userProfile?.email || 'anon';
+      const storageKey = `eddie_chat_sessions_${email}`;
+      
+      const updated = prevSessions.map(session => {
+        if (session.id === activeSessionId) {
+          const resolvedMessages = typeof newMessagesOrFn === 'function' 
+            ? newMessagesOrFn(session.messages) 
+            : newMessagesOrFn;
+          return {
+            ...session,
+            messages: resolvedMessages
+          };
+        }
+        return session;
+      });
+      
+      secureSave(storageKey, updated);
+      return updated;
+    });
+  };
+
+  useEffect(() => {
+    const email = userProfile?.email || 'anon';
+    const storageKey = `eddie_chat_sessions_${email}`;
+    const loadedSessions = secureLoad<ChatSession[]>(storageKey, []);
+    
+    const todayKey = getCurrentDateKey();
+    
+    // Ensure today's session exists
+    let updatedSessions = [...loadedSessions];
+    let todaySession = updatedSessions.find(s => s.id === todayKey);
+    
+    if (!todaySession) {
+      todaySession = {
+        id: todayKey,
+        dateLabel: formatDateLabel(todayKey),
+        messages: [
+          {
+            role: 'assistant',
+            content: WELCOME_MESSAGE_CONTENT,
+            timestamp: new Date()
+          }
+        ]
+      };
+      // Insert today's session at the beginning
+      updatedSessions = [todaySession, ...updatedSessions];
+      secureSave(storageKey, updatedSessions);
+    }
+    
+    setSessions(updatedSessions);
+    setActiveSessionId(todayKey);
+  }, [userProfile?.email]);
+
+  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent choosing deleted session
+    if (confirm('¿Desea eliminar esta conversación del historial?')) {
+      const email = userProfile?.email || 'anon';
+      const storageKey = `eddie_chat_sessions_${email}`;
+      
+      const updated = sessions.filter(s => s.id !== sessionId);
+      
+      let nextActiveId = activeSessionId;
+      if (activeSessionId === sessionId) {
+        const todayKey = getCurrentDateKey();
+        nextActiveId = updated.find(s => s.id === todayKey)?.id || todayKey;
+      }
+      
+      const todayKey = getCurrentDateKey();
+      if (updated.length === 0 || !updated.some(s => s.id === todayKey)) {
+        const todaySession: ChatSession = {
+          id: todayKey,
+          dateLabel: formatDateLabel(todayKey),
+          messages: [
+            {
+              role: 'assistant',
+              content: WELCOME_MESSAGE_CONTENT,
+              timestamp: new Date()
+            }
+          ]
+        };
+        updated.unshift(todaySession);
+        nextActiveId = todayKey;
+      }
+      
+      secureSave(storageKey, updated);
+      setSessions(updated);
+      setActiveSessionId(nextActiveId);
+    }
+  };
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +355,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
+    setExpression('thinking');
     setError(null);
 
     try {
@@ -93,15 +383,29 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
       }
 
       const data = await response.json();
+      const replyText = data.reply || 'No obtuve respuesta del asistente.';
       
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: data.reply || 'No obtuve respuesta del asistente.',
+        content: replyText,
         timestamp: new Date()
       }]);
+
+      // Set expression based on query/response context
+      const lowerText = (textToSend + " " + replyText).toLowerCase();
+      if (lowerText.includes('urgente') || lowerText.includes('crítica') || lowerText.includes('falla') || lowerText.includes('alerta') || lowerText.includes('grave') || lowerText.includes('roto') || lowerText.includes('chappie') || lowerText.includes('incendio') || lowerText.includes('corto')) {
+        setExpression('surprised');
+      } else if (lowerText.includes('gracias') || lowerText.includes('éxito') || lowerText.includes('bien') || lowerText.includes('resuelto') || lowerText.includes('completado') || lowerText.includes('hola') || lowerText.includes('feliz') || lowerText.includes('perfecto') || lowerText.includes('solucionado')) {
+        setExpression('happy');
+      } else if (lowerText.includes('pendiente') || lowerText.includes('vieja') || lowerText.includes('reparar') || lowerText.includes('cómo') || lowerText.includes('por qué')) {
+        setExpression('worried');
+      } else {
+        setExpression('neutral');
+      }
     } catch (err: any) {
       console.error("Chat Bot Error:", err);
       setError(err.message || 'Ocurrió un error inesperado al conectar con la Inteligencia Artificial.');
+      setExpression('worried');
     } finally {
       setIsLoading(false);
     }
@@ -117,6 +421,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
         }
       ]);
       setError(null);
+      setExpression('neutral');
     }
   };
 
@@ -172,7 +477,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
       
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.text("Eddie AI - Reporte Oficial", 145, 26);
+      doc.text("Reporte de Mantenimiento", 145, 26);
       
       // Title of the report
       doc.setTextColor(40, 40, 40);
@@ -191,7 +496,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
         hour: '2-digit',
         minute: '2-digit'
       });
-      doc.text(`Fecha de Emisión: ${currentDate} | Generado por: Eddie Asistente de IA`, 15, 54);
+      doc.text(`Fecha de Emisión: ${currentDate} | Generado por: Equipo de Mantenimiento del Edificio`, 15, 54);
       
       // Divider
       doc.setDrawColor(220, 220, 220);
@@ -339,7 +644,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(140, 140, 140);
-      doc.text("Este reporte fue compilado digitalmente por Eddie AI, asistente oficial de Cita con la Vida.", 15, 282);
+      doc.text("Este reporte fue confeccionado por el Equipo de Mantenimiento del Edificio de Cita con la Vida.", 15, 282);
       doc.text("Página 1 de 1", 185, 282);
       
       const filename = `Reporte_${reportData.month.replace(/\s+/g, '_')}_Mantenimiento_2026.pdf`;
@@ -347,6 +652,251 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
     } catch (e) {
       console.error("Error generating PDF:", e);
       alert("Hubo un error al generar tu archivo PDF. Por favor reintenta.");
+    }
+  };
+
+  // Generate a highly formatted, beautifully styled Excel-compatible HTML spreadsheet
+  const handleDownloadExcel = (reportData: any) => {
+    try {
+      const title = reportData.title || `Reporte de Incidencias - ${reportData.month || 'General'}`;
+      const stats = reportData.stats || {};
+      const incidents = reportData.incidents || [];
+
+      let html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
+          <style>
+            table { border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            td, th { border: 1px solid #cbd5e1; padding: 10px; font-size: 10pt; }
+            th { background-color: #f1f5f9; color: #1e293b; font-weight: bold; border: 1px solid #94a3b8; }
+            .header { background-color: #7a172c; color: #ffffff; font-size: 15pt; font-weight: bold; text-align: center; }
+            .subheader { background-color: #9e1b34; color: #ffffff; font-size: 11pt; font-weight: bold; }
+            .stat-label { background-color: #f8fafc; font-weight: bold; color: #475569; }
+            .stat-val { font-weight: bold; color: #0f172a; }
+            .stat-val-cost { font-weight: bold; color: #7a172c; }
+            .badge-done { background-color: #dcfce7; color: #15803d; font-weight: bold; text-align: center; }
+            .badge-pending { background-color: #fef3c7; color: #b45309; font-weight: bold; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <table>
+            <tr><td colspan="9" class="header" style="height: 44px; vertical-align: middle;">${title.toUpperCase()}</td></tr>
+            <tr><td colspan="9" style="height: 12px; border: none;"></td></tr>
+            <tr>
+              <td colspan="2" class="stat-label">Periodo de Análisis:</td>
+              <td colspan="2" class="stat-val">${reportData.month || "General"}</td>
+              <td colspan="2" class="stat-label">Fecha de Confección:</td>
+              <td colspan="3" class="stat-val">${new Date().toLocaleString('es-AR')}</td>
+            </tr>
+            <tr>
+              <td colspan="2" class="stat-label">Incidencias Totales:</td>
+              <td colspan="2" class="stat-val">${stats.total || incidents.length}</td>
+              <td colspan="2" class="stat-label">Estado de Casos:</td>
+              <td colspan="3" class="stat-val">${stats.completed || 0} Completadas | ${stats.pending || 0} Pendientes</td>
+            </tr>
+            <tr>
+              <td colspan="2" class="stat-label">Inversión Registrada:</td>
+              <td colspan="2" class="stat-val-cost">$${(stats.totalCost || 0).toLocaleString('es-AR')} ARS</td>
+              <td colspan="2" class="stat-label">Rubro Crítico:</td>
+              <td colspan="3" class="stat-val">${stats.mostRequestedCategory || "N/A"}</td>
+            </tr>
+            <tr><td colspan="9" style="height: 16px; border: none;"></td></tr>
+            <tr><td colspan="9" class="subheader" style="height: 32px; vertical-align: middle; text-align: left; padding-left: 10px;">GRILLA TÉCNICA - DETALLE DE INCIDENCIAS</td></tr>
+            <tr>
+              <th>ID</th>
+              <th>Título o Concepto</th>
+              <th>Categoría / Rubro</th>
+              <th>Ubicación (Piso)</th>
+              <th>Sector / Oficina</th>
+              <th>Prioridad</th>
+              <th>Estado Actual</th>
+              <th>Detalle & Acciones Realizadas</th>
+              <th>Costo Unitario</th>
+            </tr>
+      `;
+
+      incidents.forEach((inc: any) => {
+        const isComp = inc.status === 'Completada' || inc.status === 'Resuelto' || inc.status === 'Resuelta';
+        const statusClass = isComp ? 'badge-done' : 'badge-pending';
+        const detailText = inc.actionsTaken 
+          ? `[Descripción]: ${inc.description || 'Sin descripción'} -- [Acciones]: ${inc.actionsTaken}`
+          : (inc.description || 'Sin observaciones');
+        
+        html += `
+          <tr>
+            <td style="font-family: monospace; font-weight: bold; color: #475569; text-align: center;">${inc.id}</td>
+            <td style="font-weight: bold; color: #0f172a;">${inc.title || ''}</td>
+            <td>${inc.category || ''}</td>
+            <td style="text-align: center;">${inc.floor || ''}</td>
+            <td>${inc.sector || ''}</td>
+            <td style="text-align: center;">${inc.priority || 'Media'}</td>
+            <td class="${statusClass}">${(inc.status || '').toUpperCase()}</td>
+            <td>${detailText}</td>
+            <td style="font-weight: bold; color: #7a172c; text-align: right;">$${(inc.cost || 0).toLocaleString('es-AR')}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            <tr><td colspan="9" style="height: 15px; border: none;"></td></tr>
+            <tr>
+              <td colspan="9" style="font-size: 8.5pt; color: #94a3b8; font-style: italic; text-align: center; border: none; height: 30px; vertical-align: middle;">
+                Reporte exportado formalmente de la plataforma de mantenimiento de Cita con la Vida (Pasaje Aranda 827).
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Reporte_${(reportData.month || 'Mantenimiento').replace(/\s+/g, '_')}_Mantenimiento.xls`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error("Error generating Excel:", e);
+      alert("Hubo un error al generar tu archivo Excel. Por favor reintenta.");
+    }
+  };
+
+  // Generate a highly formatted Word-compatible Document (.doc) with beautiful header, layout and signature lines
+  const handleDownloadWord = (reportData: any) => {
+    try {
+      const title = reportData.title || `Reporte Técnico de Mantenimiento - ${reportData.month || 'General'}`;
+      const stats = reportData.stats || {};
+      const incidents = reportData.incidents || [];
+
+      let html = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="content-type" content="text/plain; charset=UTF-8"/>
+          <style>
+            @page { size: 21cm 29.7cm; margin: 2.5cm 2.5cm 2.5cm 2.5cm; }
+            body { font-family: 'Calibri', 'Arial', sans-serif; color: #1e293b; line-height: 1.5; }
+            h1 { color: #7a172c; font-family: 'Century Gothic', sans-serif; font-size: 20pt; font-weight: bold; margin-bottom: 2px; border-bottom: 2px solid #7a172c; padding-bottom: 6px; }
+            h2 { color: #9e1b34; font-family: 'Century Gothic', sans-serif; font-size: 13pt; font-weight: bold; margin-top: 18px; margin-bottom: 8px; }
+            p { font-size: 10.5pt; margin-top: 0; margin-bottom: 6px; }
+            .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+            .meta-table td { padding: 6px; border: 1px solid #e2e8f0; font-size: 9.5pt; }
+            .meta-label { font-weight: bold; background-color: #f8fafc; color: #475569; width: 25%; }
+            .incident-card { border: 1px solid #e2e8f0; border-left: 4px solid #7a172c; padding: 10px; margin-bottom: 12px; background-color: #fafafa; }
+            .incident-title { font-size: 10.5pt; font-weight: bold; color: #0f172a; margin-bottom: 2px; }
+            .incident-meta { font-size: 9pt; color: #64748b; margin-bottom: 6px; font-style: italic; }
+            .incident-body { font-size: 9.5pt; color: #334155; }
+            .footer { margin-top: 30px; border-top: 1px solid #cbd5e1; padding-top: 8px; font-size: 8.5pt; color: #94a3b8; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div style="text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 9.5pt; font-weight: bold; color: #7a172c; text-transform: uppercase; letter-spacing: 2px;">CITA CON LA VIDA</span><br/>
+            <span style="font-size: 7.5pt; color: #64748b;">SISTEMA INTELIGENTE DE GESTIÓN DE MANTENIMIENTO EDILICIO</span>
+          </div>
+
+          <h1>INFORME OFICIAL DE INCIDENCIAS</h1>
+          <p style="font-size: 11pt; font-style: italic; color: #475569; margin-bottom: 16px;">${title}</p>
+
+          <table class="meta-table">
+            <tr>
+              <td class="meta-label">Periodo:</td>
+              <td>${reportData.month || 'General'}</td>
+              <td class="meta-label">Fecha de Emisión:</td>
+              <td>${new Date().toLocaleString('es-AR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Generado por:</td>
+              <td>Equipo de Mantenimiento de Edificios</td>
+              <td class="meta-label">Asistente de IA:</td>
+              <td>Eddie AI Support</td>
+            </tr>
+          </table>
+
+          <h2>1. RESUMEN EJECUTIVO DE GESTIÓN</h2>
+          <p>Se adjunta el reporte detallado con las reparaciones y el mantenimiento correspondientes al edificio central de la institución ubicado en <strong>Pasaje Aranda 827</strong>. Los indicadores consolidados para el periodo son:</p>
+          
+          <ul>
+            <li><strong>Total de Incidencias registradas:</strong> ${stats.total || incidents.length} reportes evaluados.</li>
+            <li><strong>Casos Resueltos exitosamente:</strong> ${stats.completed || 0} reparaciones finalizadas.</li>
+            <li><strong>Casos Activos / Pendientes:</strong> ${stats.pending || 0} incidentes en proceso de atención.</li>
+            <li><strong>Inversión Total de Reparaciones:</strong> $${(stats.totalCost || 0).toLocaleString('es-AR')} ARS totales.</li>
+            <li><strong>Rubro Crítico Requerido:</strong> ${stats.mostRequestedCategory || "N/A"}.</li>
+          </ul>
+
+          <h2>2. DESGLOSE INDIVIDUAL DE REQUERIMIENTOS</h2>
+          <p>A continuación se listan las tareas técnicas abordadas y pendientes correspondientes a este periodo:</p>
+
+          <div>
+      `;
+
+      incidents.forEach((inc: any) => {
+        const isComp = inc.status === 'Completada' || inc.status === 'Resuelto' || inc.status === 'Resuelta';
+        const statusText = isComp ? 'REPARACIÓN COMPLETADA / RESUELTA' : 'PENDIENTE / EN PROCESO DE EVALUACIÓN';
+        const statusColor = isComp ? '#15803d' : '#b45309';
+        
+        html += `
+          <div class="incident-card">
+            <div class="incident-title">${inc.id} - ${inc.title || 'Inconsistencia Reportada'}</div>
+            <div class="incident-meta">
+              Categoría: <strong>${inc.category || 'N/A'}</strong> | 
+              Piso: <strong>${inc.floor || 'N/A'}</strong> | 
+              Sector: <strong>${inc.sector || 'N/A'}</strong> | 
+              Prioridad: <strong>${inc.priority || 'Media'}</strong>
+            </div>
+            <div class="incident-body">
+              <p><strong>Descripción de Falla:</strong> ${inc.description || 'No se brindó una descripción específica.'}</p>
+              <p><strong>Estado Actual:</strong> <span style="color: ${statusColor}; font-weight: bold;">${statusText}</span></p>
+              ${inc.actionsTaken ? `<p><strong>Acción Técnica Adoptada:</strong> ${inc.actionsTaken}</p>` : ''}
+              ${inc.cost ? `<p><strong>Inversión en Reparación:</strong> $${inc.cost.toLocaleString('es-AR')} ARS</p>` : ''}
+            </div>
+          </div>
+        `;
+      });
+
+      html += `
+          </div>
+
+          <br/>
+          <h2>3. VALIDACIÓN Y FIRMAS RECONOCIDAS</h2>
+          <p>Toda reparación expuesta en este informe cuenta con la debida inspección técnica y aprobación administrativa por las partes firmantes:</p>
+          
+          <br/><br/>
+          <table style="width: 100%; border: none; margin-top: 30px;">
+            <tr>
+              <td style="width: 45%; border: none; border-top: 1px solid #333333; text-align: center; padding-top: 6px; font-size: 9.5pt;">
+                <strong>Equipo Técnico de Mantenimiento</strong><br/>
+                Pasaje Aranda 827
+              </td>
+              <td style="width: 10%; border: none;"></td>
+              <td style="width: 45%; border: none; border-top: 1px solid #333333; text-align: center; padding-top: 6px; font-size: 9.5pt;">
+                <strong>Administración de Cita con la Vida</strong><br/>
+                Institución Central
+              </td>
+            </tr>
+          </table>
+
+          <div class="footer">
+            Este reporte oficial de soporte fue redactado por Eddie, el asistente de soporte técnico inteligente de Cita con la Vida.<br/>
+            Dirección: Pasaje Aranda 827 | Teléfono Recepción: 4254227 Int 11
+          </div>
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Informe_${(reportData.month || 'Mantenimiento').replace(/\s+/g, '_')}_Mantenimiento.doc`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error("Error generating Word document:", e);
+      alert("Hubo un error al generar tu archivo Word. Por favor reintenta.");
     }
   };
 
@@ -404,45 +954,41 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
   };
 
   return (
-    <div className="max-w-3xl mx-auto flex flex-col h-[calc(100vh-9.5rem)] md:h-[calc(100vh-10.5rem)] bg-slate-50/30 border border-slate-200/80 rounded-3xl shadow-[0_10px_40px_-15px_rgba(0,0,0,0.06)] overflow-hidden backdrop-blur-xs" id="ai-support-container">
+    <div className="max-w-none w-full flex flex-col h-[calc(100vh-8.5rem)] md:h-[calc(100vh-9rem)] bg-slate-50/30 border border-slate-200/80 rounded-3xl shadow-[0_10px_40px_-15px_rgba(0,0,0,0.06)] overflow-hidden backdrop-blur-xs" id="ai-support-container">
       
       {/* Bot Chat Header */}
-      <div className="p-4 md:p-5 bg-white border-b border-slate-100 flex justify-between items-center relative z-10 shadow-xs">
+      <div className="p-3 md:p-3.5 bg-white border-b border-slate-100 flex justify-between items-center relative z-10 shadow-xs">
         <div className="absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-primary/10 to-transparent" />
-        <div className="flex items-center gap-3.5">
+        <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#7a172c] to-[#9c1f3a] text-white flex items-center justify-center shadow-[0_4px_12px_rgba(122,23,44,0.25)] relative overflow-hidden group">
-              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <Sparkles size={19} className="animate-pulse text-rose-100" />
-            </div>
+            <EddieAvatar expression={expression} size="md" />
             <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full flex items-center justify-center shadow-xs">
               <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping opacity-75" />
             </span>
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-xs md:text-sm font-black text-slate-800 tracking-tight">Eddie Assistant</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs md:text-sm font-black text-slate-800 tracking-tight">Eddie</h3>
               <span className="px-2 py-0.5 bg-green-50 text-green-700 text-[9px] font-extrabold rounded-md border border-green-100 uppercase tracking-wider scale-95 origin-left">
                 Online
               </span>
-              {userProfile?.isAdmin ? (
-                <span className="px-2 py-0.5 bg-[#7a172c]/5 text-[#7a172c] text-[9px] font-bold rounded-md border border-[#7a172c]/10 flex items-center gap-1 scale-95 origin-left">
-                  <span>🛡️</span> Admin
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-bold rounded-md border border-slate-200/60 flex items-center gap-1 scale-95 origin-left">
-                  <span>🏢</span> Personal
-                </span>
-              )}
             </div>
-            <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1 mt-0.5">
-              <Wrench size={10} className="text-primary/70" />
-              Soporte de Mantenimiento &bull; Edificio Central
-            </p>
           </div>
         </div>
         
         <div className="flex items-center gap-1.5">
+          {onSyncOneDrive && (
+            <button
+              onClick={onSyncOneDrive}
+              disabled={isSyncing}
+              className={`px-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${isSyncing ? 'opacity-75 cursor-wait' : ''}`}
+              title="Sincronizar incidencias con el Excel de OneDrive"
+            >
+              <RefreshCw size={13} className={isSyncing ? 'animate-spin text-[#7a172c]' : 'text-emerald-600'} />
+              <span className="hidden sm:inline">{isSyncing ? 'Sincronizando...' : 'Sincronizar OneDrive'}</span>
+            </button>
+          )}
+          
           <button
             onClick={handleClearChat}
             title="Reiniciar chat con Eddie"
@@ -534,13 +1080,13 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
               className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}
             >
               {/* Avatar */}
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs select-none transition-transform duration-200 ${
-                msg.role === 'user' 
-                  ? 'bg-[#7a172c] text-white' 
-                  : 'bg-white border border-slate-100 text-[#7a172c]'
-              }`}>
-                {msg.role === 'user' ? <User size={15} /> : <Sparkles size={15} className="text-primary" />}
-              </div>
+              {msg.role === 'user' ? (
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs select-none bg-[#7a172c] text-white">
+                  <User size={15} />
+                </div>
+              ) : (
+                <EddieAvatar expression="neutral" size="sm" />
+              )}
 
               {/* Text Bubble */}
               <div className={`p-4 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.02)] space-y-1.5 max-w-full transition-all duration-200 ${
@@ -608,13 +1154,35 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
                                   </span>
                                 </div>
 
-                                <button
-                                  onClick={() => handleDownloadPDF(reportData)}
-                                  className="w-full py-2 bg-[#7a172c] hover:bg-[#8e1d35] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md cursor-pointer active:scale-[0.99] mt-1"
-                                >
-                                  <Download size={13} />
-                                  <span>Descargar Informe Técnico PDF</span>
-                                </button>
+                                <div className="space-y-1.5 mt-1">
+                                  {/* PDF Button (Primary) */}
+                                  <button
+                                    onClick={() => handleDownloadPDF(reportData)}
+                                    className="w-full py-2 bg-[#7a172c] hover:bg-[#8e1d35] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs hover:shadow-sm cursor-pointer active:scale-[0.99]"
+                                  >
+                                    <Download size={13} />
+                                    <span>Descargar Informe Técnico PDF</span>
+                                  </button>
+
+                                  {/* Secondary Buttons Row: Excel and Word */}
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    <button
+                                      onClick={() => handleDownloadExcel(reportData)}
+                                      className="py-1.5 px-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-[0.99]"
+                                    >
+                                      <FileSpreadsheet size={11} />
+                                      <span>Planilla Excel (.xls)</span>
+                                    </button>
+                                    
+                                    <button
+                                      onClick={() => handleDownloadWord(reportData)}
+                                      className="py-1.5 px-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-[0.99]"
+                                    >
+                                      <FileEdit size={11} />
+                                      <span>Documento Word (.doc)</span>
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
                             </motion.div>
                           ) : (
@@ -623,7 +1191,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
                               <div className="space-y-1">
                                 <h4 className="text-xs font-bold text-red-900">Acceso Técnico Restringido</h4>
                                 <p className="text-[10px] text-red-700/90 leading-relaxed font-medium">
-                                  La generación y descarga del reporte analítico oficial en PDF requiere permisos de **Administrador**. El bot puede facilitarte las estadísticas resumidas por texto en este chat, pero el archivo firmado formal está bloqueado.
+                                  La generación y descarga del reporte analítico oficial en PDF, Excel o Word requiere permisos de **Administrador**. El bot puede facilitarte las estadísticas resumidas por texto en este chat, pero los archivos formales están bloqueados.
                                 </p>
                               </div>
                             </div>
@@ -634,7 +1202,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
                   })()}
                 </div>
                 <div className={`text-[8px] font-medium text-right mt-1.5 ${msg.role === 'user' ? 'text-white/70' : 'text-slate-400'}`}>
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </motion.div>
@@ -648,9 +1216,7 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
             animate={{ opacity: 1, y: 0 }}
             className="flex gap-3 max-w-[80%] mr-auto"
           >
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-white border border-slate-150 text-[#7a172c] shrink-0 shadow-2xs">
-              <Sparkles size={15} className="animate-spin text-primary" />
-            </div>
+            <EddieAvatar expression="thinking" size="sm" />
             <div className="p-4 bg-white border border-slate-100 rounded-3xl rounded-tl-none shadow-2xs flex items-center gap-2">
               <div className="flex gap-1">
                 <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -685,19 +1251,19 @@ export default function SoporteView({ incidents, userProfile }: SoporteViewProps
 
       {/* Suggested Questions Section */}
       {messages.length === 1 && !isLoading && (
-        <div className="px-4 py-3 bg-white border-t border-slate-100 relative z-10">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 flex items-center gap-1.5 pl-1">
-            <HelpCircle size={11} className="text-primary/70" /> Sugerencias Rápidas
+        <div className="px-4 py-2 bg-white border-t border-slate-100 relative z-10">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1 pl-1">
+            <HelpCircle size={10} className="text-primary/70" /> Sugerencias Rápidas
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {SUGGESTIONS.map((sug, i) => (
               <button
                 key={i}
                 onClick={() => handleSendMessage(sug)}
-                className="text-left bg-slate-50 hover:bg-primary/5 text-slate-600 hover:text-primary border border-slate-200/50 hover:border-primary/20 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 shadow-3xs active:scale-98 cursor-pointer group"
+                className="text-left bg-slate-50 hover:bg-primary/5 text-slate-600 hover:text-primary border border-slate-200/50 hover:border-primary/20 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all duration-200 flex items-center gap-1 shadow-3xs active:scale-98 cursor-pointer group"
               >
                 <span>{sug}</span>
-                <ArrowRight size={11} className="text-slate-400 group-hover:text-primary shrink-0 transition-transform group-hover:translate-x-0.5" />
+                <ArrowRight size={10} className="text-slate-400 group-hover:text-primary shrink-0 transition-transform group-hover:translate-x-0.5" />
               </button>
             ))}
           </div>
