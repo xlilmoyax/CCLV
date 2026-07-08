@@ -16,6 +16,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { hashPassword } from '../utils/security';
 
 interface GateScreenProps {
   approvedWorkers: UserProfile[];
@@ -45,11 +46,12 @@ export function GateScreen({
   const [regDocument, setRegDocument] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
   const [regOffice, setRegOffice] = useState<UserProfile['office']>('Misiones');
   const [regAdminPassword, setRegAdminPassword] = useState('');
   const [regError, setRegError] = useState('');
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
@@ -57,65 +59,82 @@ export function GateScreen({
       setLoginError('Por favor ingrese su correo electrónico.');
       return;
     }
+    if (!loginPassword) {
+      setLoginError('Por favor ingrese su contraseña.');
+      return;
+    }
 
-    // 1. Check if email matches password for admin login
+    const emailLower = loginEmail.toLowerCase().trim();
+
+    // 1. Check if email is in approved workers list
+    const foundApproved = approvedWorkers.find(
+      u => u.email.toLowerCase().trim() === emailLower
+    );
+
+    // 2. Check if email is in pending workers list
+    const foundPending = pendingWorkers.find(
+      u => u.email.toLowerCase().trim() === emailLower
+    );
+
+    const foundUser = foundApproved || foundPending;
+
+    if (foundUser) {
+      // If the user has a secure password hash, verify it
+      if (foundUser.passwordHash) {
+        const inputHash = await hashPassword(loginPassword);
+        if (inputHash === foundUser.passwordHash) {
+          onLogin(foundUser);
+          return;
+        } else {
+          setLoginError('Contraseña incorrecta. Por favor intente nuevamente.');
+          return;
+        }
+      } else {
+        // Legacy seed user fallback (using '123456' or administration password as default password)
+        if (loginPassword === '123456' || loginPassword === 'administracionpreventiva') {
+          // Auto-migrate to secure hash on login for security!
+          const secureHash = await hashPassword(loginPassword);
+          const migratedUser = { ...foundUser, passwordHash: secureHash };
+          onLogin(migratedUser);
+          return;
+        } else {
+          setLoginError('Contraseña incorrecta. Ingrese su contraseña registrada (o "123456" si es un usuario preexistente).');
+          return;
+        }
+      }
+    }
+
+    // 3. Fallback / Default admin email bypass
     if (loginPassword.trim() === 'administracionpreventiva') {
       // Dynamic admin login
       const adminProfile: UserProfile = {
         name: 'Administrador de Guardia',
         document: '99.999.999',
         phone: '3764-000000',
-        email: loginEmail.toLowerCase().trim(),
+        email: emailLower,
         office: 'Administración',
         isAdmin: true,
-        isApproved: true
+        isApproved: true,
+        passwordHash: await hashPassword('administracionpreventiva')
       };
       onLogin(adminProfile);
       return;
     }
 
-    // 2. Check if email is in approved workers list
-    const foundApproved = approvedWorkers.find(
-      u => u.email.toLowerCase().trim() === loginEmail.toLowerCase().trim()
-    );
-    if (foundApproved) {
-      onLogin(foundApproved);
-      return;
-    }
-
-    // 3. Check if email is in pending workers list
-    const foundPending = pendingWorkers.find(
-      u => u.email.toLowerCase().trim() === loginEmail.toLowerCase().trim()
-    );
-    if (foundPending) {
-      onLogin(foundPending);
-      return;
-    }
-
-    // 4. Default admin email bypass
-    if (loginEmail.toLowerCase().includes('admin') && loginPassword === 'administracionpreventiva') {
-      const adminProfile: UserProfile = {
-        name: 'Administrador General',
-        document: '00.000.000',
-        phone: '3764-999999',
-        email: loginEmail.toLowerCase().trim(),
-        office: 'Administración',
-        isAdmin: true,
-        isApproved: true
-      };
-      onLogin(adminProfile);
-      return;
-    }
-
-    setLoginError('El correo ingresado no está registrado o requiere contraseña de administración. Si se acaba de registrar, espere la aprobación de un administrador.');
+    setLoginError('El correo ingresado no está registrado o la contraseña es inválida. Si se acaba de registrar, espere la aprobación de un administrador.');
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
 
-    if (!regName.trim() || !regDocument.trim() || !regPhone.trim() || !regEmail.trim()) {
-      setRegError('Por favor complete todos los campos obligatorios.');
+    if (!regName.trim() || !regDocument.trim() || !regPhone.trim() || !regEmail.trim() || !regPassword) {
+      setRegError('Por favor complete todos los campos obligatorios, incluyendo su contraseña.');
+      return;
+    }
+
+    if (regPassword.length < 6) {
+      setRegError('Por seguridad, la contraseña debe tener al menos 6 caracteres.');
       return;
     }
 
@@ -129,10 +148,13 @@ export function GateScreen({
       return;
     }
 
+    // Securely hash the custom password before storing it
+    const securePasswordHash = await hashPassword(regPassword);
+
     if (registerRole === 'admin') {
       // Admin Register
       if (regAdminPassword !== 'administracionpreventiva') {
-        setRegError('La contraseña administrativa ingresada es incorrecta.');
+        setRegError('La contraseña de validación administrativa ingresada es incorrecta.');
         return;
       }
       if (regOffice !== 'Mantenimiento' && regOffice !== 'Administración') {
@@ -147,7 +169,8 @@ export function GateScreen({
         email: emailLower,
         office: regOffice,
         isAdmin: true,
-        isApproved: true
+        isApproved: true,
+        passwordHash: securePasswordHash
       };
       onRegisterAdmin(newAdmin);
     } else {
@@ -164,7 +187,8 @@ export function GateScreen({
         email: emailLower,
         office: regOffice as any,
         isAdmin: false,
-        isApproved: false
+        isApproved: false,
+        passwordHash: securePasswordHash
       };
       onRegisterWorker(newWorker);
     }
@@ -272,13 +296,14 @@ export function GateScreen({
 
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">Contraseña Administrativa</label>
-                      <span className="text-[9px] text-primary italic font-semibold">(Opcional para personal)</span>
+                      <label className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block">Contraseña</label>
+                      <span className="text-[9px] text-primary italic font-semibold">(Su clave registrada o "123456")</span>
                     </div>
                     <div className="relative">
                       <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
                       <input
                         type="password"
+                        required
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         placeholder="••••••••"
@@ -413,6 +438,22 @@ export function GateScreen({
                         onChange={(e) => setRegEmail(e.target.value)}
                         placeholder="Su correo electrónico"
                         className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-outline-variant rounded-xl focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider block">Crear Contraseña Propia</label>
+                    <div className="relative">
+                      <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
+                      <input
+                        type="password"
+                        required
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="Mínimo 6 caracteres"
+                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-outline-variant rounded-xl focus:outline-none focus:ring-1 focus:ring-primary font-mono"
                       />
                     </div>
                   </div>

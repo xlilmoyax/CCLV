@@ -59,7 +59,7 @@ export default function DashboardView({
     IT: categoryCounts['IT'] || 1,
   };
 
-  const totalCatSum = Object.values(finalCategoryCounts).reduce((a, b) => a + b, 0);
+  const totalCatSum = Object.values(finalCategoryCounts).reduce((a, b) => a + b, 0) || 1;
 
   // Floor distribution
   const floorCounts = incidents.reduce((acc, curr) => {
@@ -100,18 +100,20 @@ export default function DashboardView({
 
   // Generate SVG donut parameters
   let cumulativePercent = 0;
-  const donutSlices = Object.entries(finalCategoryCounts).map(([cat, val]) => {
-    const percent = (val / totalCatSum) * 100;
-    const start = cumulativePercent;
-    cumulativePercent += percent;
-    return {
-      category: cat,
-      value: val,
-      percent,
-      start,
-      color: categoryColors[cat]?.fill || '#77767f'
-    };
-  });
+  const donutSlices = Object.entries(finalCategoryCounts)
+    .map(([cat, val]) => {
+      const percent = totalCatSum > 0 ? (val / totalCatSum) * 100 : 0;
+      const start = cumulativePercent;
+      cumulativePercent += percent;
+      return {
+        category: cat,
+        value: val,
+        percent: isNaN(percent) ? 0 : percent,
+        start: isNaN(start) ? 0 : start,
+        color: categoryColors[cat]?.fill || '#77767f'
+      };
+    })
+    .filter(slice => slice.percent > 0);
 
   if (userProfile && !userProfile.isAdmin) {
     return (
@@ -375,8 +377,10 @@ export default function DashboardView({
               <svg className="w-48 h-48 transform -rotate-90" viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#f0edf1" strokeWidth="3" />
                 {donutSlices.map((slice, idx) => {
-                  const strokeDasharray = `${slice.percent} ${100 - slice.percent}`;
-                  const strokeDashoffset = 100 - slice.start;
+                  const percentVal = isNaN(slice.percent) ? 0 : slice.percent;
+                  const startVal = isNaN(slice.start) ? 0 : slice.start;
+                  const strokeDasharray = `${percentVal.toFixed(2)} ${(100 - percentVal).toFixed(2)}`;
+                  const strokeDashoffset = (100 - startVal).toFixed(2);
                   return (
                     <circle
                       key={idx}
@@ -532,7 +536,7 @@ export default function DashboardView({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    key={activity.id}
+                    key={`${activity.id}-${index}`}
                     className="flex items-start gap-4 p-4 hover:bg-surface-container-low transition-colors rounded-lg border border-outline-variant"
                   >
                     {/* Circle Status Icon */}

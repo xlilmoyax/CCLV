@@ -31,6 +31,7 @@ export interface UserProfile {
   office: 'Misiones' | 'Kinectika' | 'Jóvenes' | 'Administración' | 'Mantenimiento';
   isAdmin?: boolean;
   isApproved?: boolean;
+  passwordHash?: string;
 }
 
 export interface Incident {
@@ -48,6 +49,8 @@ export interface Incident {
   imageUrl?: string;
   createdAt: string; // Fecha de inicio
   completedAt?: string; // Fecha de finalización (cuando esté completada)
+  cost?: number; // Costo/monto monetario de la resolución (opcional)
+  actionsTaken?: string; // Detalle de qué acción o arreglo se hizo (opcional)
   reportedBy?: {
     name: string;
     email: string;

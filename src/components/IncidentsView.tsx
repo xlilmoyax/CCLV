@@ -22,11 +22,13 @@ import { FLOORS, CATEGORIES } from '../data';
 
 interface IncidentsViewProps {
   incidents: Incident[];
-  onUpdateIncidentStatus: (id: string, newStatus: StatusType) => void;
+  onUpdateIncidentStatus: (id: string, newStatus: StatusType, cost?: number, actionsTaken?: string) => void;
   onUpdateIncidentPriority: (id: string, newPriority: PriorityType) => void;
   onDeleteIncident: (id: string) => void;
   onOpenNewIncident: () => void;
   userProfile?: UserProfile | null;
+  highlightedIncidentId?: string | null;
+  onClearHighlight?: () => void;
 }
 
 export default function IncidentsView({
@@ -35,7 +37,9 @@ export default function IncidentsView({
   onUpdateIncidentPriority,
   onDeleteIncident,
   onOpenNewIncident,
-  userProfile
+  userProfile,
+  highlightedIncidentId,
+  onClearHighlight
 }: IncidentsViewProps) {
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,8 +49,33 @@ export default function IncidentsView({
 
   // Incident detail modal state
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const activeIncident = selectedIncident ? (incidents.find(i => i.id === selectedIncident.id) || selectedIncident) : null;
+
+  // Sync highlighted incident
+  React.useEffect(() => {
+    if (highlightedIncidentId) {
+      const found = incidents.find(i => i.id === highlightedIncidentId);
+      if (found) {
+        if (found.status === 'Completada') {
+          setSelectedStatus('Todos');
+        } else {
+          setSelectedStatus('Activos');
+        }
+        setSearchTerm('');
+        setSelectedFloor('Todos');
+        setSelectedCategory('Todas');
+        setSelectedIncident(found);
+      }
+    }
+  }, [highlightedIncidentId, incidents]);
+
+  const handleCloseModal = () => {
+    setSelectedIncident(null);
+    setShowDeleteConfirm(false);
+    onClearHighlight?.();
+  };
 
   // Filtered incidents
   const filteredIncidents = incidents.filter(incident => {
@@ -73,6 +102,13 @@ export default function IncidentsView({
     }
 
     return matchesSearch && matchesFloor && matchesCategory && matchesStatus;
+  });
+
+  // Sort incidents from most recent (newest) to oldest
+  const sortedIncidents = [...filteredIncidents].sort((a, b) => {
+    const dateA = a.createdAt || '';
+    const dateB = b.createdAt || '';
+    return dateB.localeCompare(dateA);
   });
 
   // KPI Calculations on the fly for dynamic feel
@@ -229,7 +265,7 @@ export default function IncidentsView({
             </button>
           </div>
         ) : (
-          filteredIncidents.map((incident) => {
+          sortedIncidents.map((incident) => {
             const isCritical = incident.priority === 'Crítica';
             const isCompleted = incident.status === 'Completada';
             const isPending = incident.status === 'Pendiente';
@@ -388,7 +424,7 @@ export default function IncidentsView({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setSelectedIncident(null)}
+              onClick={handleCloseModal}
               className="absolute inset-0 bg-black/60 backdrop-blur-xs"
             />
 
@@ -408,7 +444,7 @@ export default function IncidentsView({
                   </span>
                 </div>
                 <button 
-                  onClick={() => setSelectedIncident(null)}
+                  onClick={handleCloseModal}
                   className="p-1.5 rounded-full hover:bg-surface-container-high text-outline hover:text-on-surface transition-colors cursor-pointer"
                 >
                   <X size={18} />
@@ -506,6 +542,64 @@ export default function IncidentsView({
                   </div>
                 )}
 
+                {/* Resolution Details Display / Inputs */}
+                {(selectedIncident.cost || selectedIncident.actionsTaken || userProfile?.isAdmin) && (
+                  <div className="p-4 bg-slate-50 border border-outline-variant rounded-xl space-y-3">
+                    <span className="text-[10px] font-bold text-[#7a172c] uppercase tracking-wider block">Resolución de Incidencia</span>
+                    
+                    {userProfile?.isAdmin ? (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-on-surface-variant block mb-1">
+                            Costo o Monto de Reparación (ARS)
+                          </label>
+                          <input 
+                            type="number"
+                            value={selectedIncident.cost !== undefined ? selectedIncident.cost : ''}
+                            onChange={(e) => {
+                              const val = e.target.value ? parseFloat(e.target.value) : undefined;
+                              onUpdateIncidentStatus(selectedIncident.id, selectedIncident.status, val, selectedIncident.actionsTaken);
+                              setSelectedIncident({ ...selectedIncident, cost: val });
+                            }}
+                            placeholder="Ej. 12500"
+                            className="w-full px-3 py-1.5 bg-white border border-outline-variant rounded-lg text-xs focus:ring-1 focus:ring-primary focus:outline-none text-on-surface font-medium"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-on-surface-variant block mb-1">
+                            Detalle de qué se hizo / Acciones tomadas
+                          </label>
+                          <textarea 
+                            rows={2}
+                            value={selectedIncident.actionsTaken || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              onUpdateIncidentStatus(selectedIncident.id, selectedIncident.status, selectedIncident.cost, val);
+                              setSelectedIncident({ ...selectedIncident, actionsTaken: val });
+                            }}
+                            placeholder="Ej. Se lubricó el picaporte y se cambió el cilindro de la cerradura."
+                            className="w-full px-3 py-1.5 bg-white border border-outline-variant rounded-lg text-xs focus:ring-1 focus:ring-primary focus:outline-none resize-none text-on-surface font-medium"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 text-xs">
+                        {selectedIncident.actionsTaken && (
+                          <p className="text-on-surface leading-relaxed">
+                            <strong className="text-on-surface-variant font-bold">Trabajo realizado:</strong> {selectedIncident.actionsTaken}
+                          </p>
+                        )}
+                        {selectedIncident.cost !== undefined && (
+                          <p className="text-on-surface">
+                            <strong className="text-on-surface-variant font-bold">Costo de resolución:</strong> ${selectedIncident.cost.toLocaleString('es-AR')} ARS
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Edit Controls Row */}
                 <div className="space-y-3">
                   <label className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block">
@@ -577,29 +671,53 @@ export default function IncidentsView({
               </div>
 
               {/* Footer Controls */}
-              <div className="px-6 py-4 bg-surface-container border-t border-outline-variant flex items-center justify-between">
-                {userProfile?.isAdmin ? (
-                  <button
-                    onClick={() => {
-                      if (confirm('¿Está seguro de eliminar este reporte de incidencia permanentemente?')) {
-                        onDeleteIncident(selectedIncident.id);
-                        setSelectedIncident(null);
-                      }
-                    }}
-                    className="text-error hover:bg-red-50 p-2 rounded-lg transition-colors inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer"
-                  >
-                    <Trash2 size={15} />
-                    <span>Eliminar Reporte</span>
-                  </button>
+              <div className="px-6 py-4 bg-surface-container border-t border-outline-variant flex flex-col sm:flex-row items-center justify-between gap-4">
+                {showDeleteConfirm ? (
+                  <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+                    <p className="text-xs font-semibold text-error text-left">
+                      ¿Seguro de eliminar este reporte permanentemente?
+                    </p>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="flex-1 sm:flex-none px-3 py-1.5 border border-outline-variant hover:bg-white text-on-surface-variant text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteIncident(selectedIncident.id);
+                          handleCloseModal();
+                        }}
+                        className="flex-1 sm:flex-none px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-3xs"
+                      >
+                        Sí, Eliminar
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="text-xs text-on-surface-variant/80 italic font-medium">Vista de lectura</div>
+                  <>
+                    {userProfile?.isAdmin ? (
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="text-error hover:bg-red-50 p-2 rounded-lg transition-colors inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                      >
+                        <Trash2 size={15} />
+                        <span>Eliminar Reporte</span>
+                      </button>
+                    ) : (
+                      <div className="text-xs text-on-surface-variant/80 italic font-medium">Vista de lectura</div>
+                    )}
+                    <button
+                      onClick={handleCloseModal}
+                      className="bg-primary hover:bg-primary-hover text-white px-5 py-2 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                    >
+                      Cerrar Detalle
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={() => setSelectedIncident(null)}
-                  className="bg-primary hover:bg-primary-hover text-white px-5 py-2 rounded-lg text-xs font-bold cursor-pointer transition-colors"
-                >
-                  Cerrar Detalle
-                </button>
               </div>
             </motion.div>
           </div>

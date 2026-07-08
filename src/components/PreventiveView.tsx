@@ -143,14 +143,6 @@ export default function PreventiveView({
               <Calendar size={18} />
               <span className="text-sm font-bold">Calendario de Octubre 2026</span>
             </div>
-            <div className="flex items-center gap-2">
-              <button className="p-1 hover:bg-surface-container-high rounded transition-colors text-outline cursor-not-allowed">
-                <ChevronLeft size={16} />
-              </button>
-              <button className="p-1 hover:bg-surface-container-high rounded transition-colors text-outline cursor-not-allowed">
-                <ChevronRight size={16} />
-              </button>
-            </div>
           </div>
 
           <div className="p-4 flex-1">
@@ -455,14 +447,10 @@ export default function PreventiveView({
         </div>
 
         {/* Pagination mock bar */}
-        <div className="p-4 border-t border-outline-variant bg-surface-container flex flex-col sm:flex-row justify-between items-center gap-2">
-          <p className="text-xs text-on-surface-variant italic">
+        <div className="p-4 border-t border-outline-variant bg-surface-container flex items-center justify-center">
+          <p className="text-xs text-on-surface-variant italic font-medium">
             Mostrando {filteredTasks.length} de {tasks.length} tareas programadas para este período.
           </p>
-          <div className="flex gap-1.5">
-            <button className="px-3 py-1.5 border border-outline-variant bg-white rounded-lg text-xs font-bold hover:bg-surface-container-low transition-colors text-outline cursor-not-allowed">Anterior</button>
-            <button className="px-3 py-1.5 border border-outline-variant bg-white rounded-lg text-xs font-bold hover:bg-surface-container-low transition-colors text-outline cursor-not-allowed">Siguiente</button>
-          </div>
         </div>
       </div>
 

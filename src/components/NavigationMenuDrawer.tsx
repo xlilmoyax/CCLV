@@ -16,7 +16,12 @@ import {
   Send,
   ArrowLeft,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  LayoutDashboard,
+  CalendarRange,
+  UserCheck,
+  MoreHorizontal,
+  Sparkles
 } from 'lucide-react';
 import { UserProfile } from '../types';
 
@@ -27,6 +32,8 @@ interface NavigationMenuDrawerProps {
   onSaveProfile: (profile: UserProfile | null) => void;
   onNavigateToTab: (tab: string) => void;
   onAddActivityLog: (title: string, description: string, statusText: string) => void;
+  pendingWorkersCount: number;
+  activeTab: string;
 }
 
 export default function NavigationMenuDrawer({
@@ -35,11 +42,13 @@ export default function NavigationMenuDrawer({
   userProfile,
   onSaveProfile,
   onNavigateToTab,
-  onAddActivityLog
+  onAddActivityLog,
+  pendingWorkersCount,
+  activeTab
 }: NavigationMenuDrawerProps) {
   
-  // Tabs: 'perfil' (which resolves to profile info or register) or 'contacto'
-  const [activeMenuTab, setActiveMenuTab] = useState<'perfil' | 'contacto'>('perfil');
+  // Tabs: 'menu', 'perfil' (which resolves to profile info or register) or 'contacto'
+  const [activeMenuTab, setActiveMenuTab] = useState<'menu' | 'perfil' | 'contacto'>('menu');
   const [isEditing, setIsEditing] = useState(false);
   const [showSessionExitView, setShowSessionExitView] = useState(false);
 
@@ -189,47 +198,86 @@ export default function NavigationMenuDrawer({
             </button>
           </div>
 
-          {/* Quick Nav Links */}
-          <div className="bg-surface-container border-b border-outline-variant px-6 py-4 flex gap-2">
-            <button
-              onClick={() => {
-                onNavigateToTab('dashboard');
-                onClose();
-              }}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 bg-white hover:bg-surface-container-high text-primary border border-outline-variant rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
-            >
-              <Home size={14} />
-              <span>Ir a Inicio</span>
-            </button>
-            <button
-              onClick={() => setActiveMenuTab('perfil')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                activeMenuTab === 'perfil' 
-                  ? 'bg-primary text-white border-primary shadow-xs' 
-                  : 'bg-white text-on-surface-variant hover:bg-surface-container-high border-outline-variant shadow-2xs'
-              }`}
-            >
-              <User size={14} />
-              <span>Mi Perfil</span>
-            </button>
-            <button
-              onClick={() => setActiveMenuTab('contacto')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                activeMenuTab === 'contacto' 
-                  ? 'bg-primary text-white border-primary shadow-xs' 
-                  : 'bg-white text-on-surface-variant hover:bg-surface-container-high border-outline-variant shadow-2xs'
-              }`}
-            >
-              <MessageSquare size={14} />
-              <span>Contacto</span>
-            </button>
-          </div>
+          {/* Main vertical stacked navigation */}
+          {activeMenuTab === 'menu' && (
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {userProfile?.isAdmin && (
+                <div>
+                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-2.5">
+                    Secciones del Aplicativo
+                  </span>
+                  <div className="flex flex-col space-y-2">
+                    <button
+                      onClick={() => {
+                        onNavigateToTab('aprobaciones');
+                        onClose();
+                      }}
+                      className={`w-full flex items-center justify-between p-3.5 rounded-xl text-xs font-bold transition-all border cursor-pointer text-left ${
+                        activeTab === 'aprobaciones'
+                          ? 'bg-primary-container/10 text-primary border-primary shadow-2xs'
+                          : 'bg-white hover:bg-slate-50 text-on-surface border-outline-variant hover:border-outline shadow-3xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <UserCheck size={18} className={activeTab === 'aprobaciones' ? 'text-primary' : 'text-indigo-600'} />
+                        <span>Personal</span>
+                      </div>
+                      {pendingWorkersCount > 0 ? (
+                        <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[9px] font-bold animate-pulse">
+                          {pendingWorkersCount} pendientes
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-outline font-medium">Gestión de personal</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className={userProfile?.isAdmin ? "border-t border-outline-variant/60 pt-5" : ""}>
+                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider block mb-2.5">
+                  Mi Cuenta y Soporte
+                </span>
+                <div className="flex flex-col space-y-2">
+                  <button
+                    onClick={() => setActiveMenuTab('perfil')}
+                    className="w-full flex items-center justify-between p-3.5 bg-white hover:bg-slate-50 text-on-surface border border-outline-variant hover:border-outline rounded-xl text-xs font-bold transition-all shadow-3xs cursor-pointer text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <User size={18} className="text-slate-600" />
+                      <span>Mi Perfil</span>
+                    </div>
+                    <span className="text-[10px] text-outline font-medium">Registrar o editar datos</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveMenuTab('contacto')}
+                    className="w-full flex items-center justify-between p-3.5 bg-white hover:bg-slate-50 text-on-surface border border-outline-variant hover:border-outline rounded-xl text-xs font-bold transition-all shadow-3xs cursor-pointer text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <MessageSquare size={18} className="text-slate-600" />
+                      <span>Contacto</span>
+                    </div>
+                    <span className="text-[10px] text-outline font-medium">Soporte y consultas</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Tab Content Wrapper */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {activeMenuTab !== 'menu' && (
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
             
             {activeMenuTab === 'perfil' && (
               <div className="space-y-6">
+                <button
+                  onClick={() => setActiveMenuTab('menu')}
+                  className="flex items-center gap-2 text-primary hover:text-primary-hover font-bold text-xs cursor-pointer mb-2 bg-slate-50 hover:bg-slate-100 py-1.5 px-3 rounded-lg border border-outline-variant transition-all inline-flex"
+                >
+                  <ArrowLeft size={14} />
+                  <span>Volver al Menú</span>
+                </button>
                 
                 {showSessionExitView ? (
                   <div className="space-y-6">
@@ -574,6 +622,39 @@ export default function NavigationMenuDrawer({
 
             {activeMenuTab === 'contacto' && (
               <div className="space-y-6">
+                <button
+                  onClick={() => setActiveMenuTab('menu')}
+                  className="flex items-center gap-2 text-primary hover:text-primary-hover font-bold text-xs cursor-pointer mb-2 bg-slate-50 hover:bg-slate-100 py-1.5 px-3 rounded-lg border border-outline-variant transition-all inline-flex"
+                >
+                  <ArrowLeft size={14} />
+                  <span>Volver al Menú</span>
+                </button>
+
+                {/* AI Assistant Banner Shortcut */}
+                <div className="p-4 bg-gradient-to-r from-pink-500/10 to-violet-500/10 border border-violet-500/20 rounded-2xl flex flex-col gap-3">
+                  <div className="flex gap-2.5 items-start">
+                    <div className="p-2 bg-white rounded-xl text-violet-600 shadow-2xs">
+                      <Sparkles size={18} className="animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-violet-950">¡Hola! Soy Eddie, tu asistente IA</h4>
+                      <p className="text-[10px] text-violet-900/80 leading-relaxed mt-0.5">
+                        Consulte los pasos para reportar fallas, sectores habilitados, incidencias pendientes o resueltas de forma instantánea.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      onNavigateToTab('soporte');
+                      onClose();
+                    }}
+                    className="w-full py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <span>Preguntarle a Eddie (Soporte IA)</span>
+                    <Sparkles size={12} />
+                  </button>
+                </div>
+
                 <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
                   <h4 className="text-xs font-bold text-blue-800">Soporte Técnico y Consultas</h4>
                   <p className="text-[10px] text-blue-700/90 leading-relaxed mt-1">
@@ -650,7 +731,8 @@ export default function NavigationMenuDrawer({
               </div>
             )}
 
-          </div>
+            </div>
+          )}
 
           {/* Footer Info */}
           <div className="p-4 bg-slate-50 border-t border-outline-variant text-center">
