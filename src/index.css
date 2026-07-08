@@ -1,0 +1,105 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Premium Bordo (Burgundy) & White Theme Colors */
+  --color-primary: #9e1b34;
+  --color-primary-hover: #7f1225;
+  --color-primary-container: #be2441;
+  --color-on-primary-container: #ffffff;
+  --color-secondary: #7c565d;
+  --color-tertiary: #8c4d59;
+  --color-tertiary-container: #e8ced3;
+  --color-on-tertiary-container: #331017;
+  --color-error: #da1b36;
+  --color-background: #fdfafb;
+  --color-on-background: #200a0d;
+  
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #fcf5f6;
+  --color-surface-container: #f7ebee;
+  --color-surface-container-high: #f1dfe2;
+  --color-surface-container-highest: #e6ced2;
+  --color-on-surface: #200a0d;
+  --color-on-surface-variant: #5e4145;
+  --color-outline: #854f59;
+  --color-outline-variant: #7a172c;
+
+  /* Custom rounded sizes matching Soft Rounded approach */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+/* Base resets or custom adjustments for modern luxury design */
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  font-family: var(--font-sans);
+  background-image: 
+    radial-gradient(circle at 10% 20%, rgba(158, 27, 52, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(158, 27, 52, 0.02) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* Custom modern glassmorphism and transparent accent details */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(158, 27, 52, 0.08);
+}
+
+.glass-panel-dark {
+  background: rgba(122, 23, 44, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Exquisite active glowing shadows */
+.shadow-premium {
+  box-shadow: 0 4px 20px -2px rgba(158, 27, 52, 0.06), 0 2px 6px -1px rgba(158, 27, 52, 0.04);
+}
+
+.shadow-premium-lg {
+  box-shadow: 0 10px 30px -5px rgba(158, 27, 52, 0.08), 0 4px 12px -2px rgba(158, 27, 52, 0.05);
+}
+
+.shadow-premium-glow {
+  box-shadow: 0 0 20px 2px rgba(158, 27, 52, 0.12);
+}
+
+/* Smooth custom scrollbars in bordo tone */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(158, 27, 52, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(158, 27, 52, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(158, 27, 52, 0.45);
+}
+
+/* Subtle pulse glow for status tags */
+@keyframes softPulse {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+.animate-soft-pulse {
+  animation: softPulse 2.5s infinite ease-in-out;
+}
+
