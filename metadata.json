@@ -1,0 +1,6 @@
+{
+  "name": "Mantenimiento - Cita con la Vida",
+  "description": "Sistema de gestión de incidencias y mantenimiento preventivo institucional.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

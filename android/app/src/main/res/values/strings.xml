@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Mantenimiento CIT</string>
+    <string name="title_activity_main">Mantenimiento CIT</string>
+    <string name="package_name">com.mantenimiento.cit</string>
+    <string name="custom_url_scheme">com.mantenimiento.cit</string>
+</resources>

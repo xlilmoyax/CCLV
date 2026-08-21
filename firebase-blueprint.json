@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil de un usuario registrado (administrador o personal).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "document": { "type": "string", "maxLength": 50 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 100 },
+        "office": { "type": "string", "maxLength": 100 },
+        "isAdmin": { "type": "boolean" },
+        "isApproved": { "type": "boolean" },
+        "passwordHash": { "type": "string", "maxLength": 256 }
+      },
+      "required": ["name", "document", "phone", "email", "office"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "Un reporte de incidencia en el edificio de Cita con la Vida.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "category": { "type": "string", "maxLength": 100 },
+        "floor": { "type": "string", "maxLength": 100 },
+        "sector": { "type": "string", "maxLength": 100 },
+        "priority": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "maxLength": 50 },
+        "timestamp": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "completedAt": { "type": "string", "maxLength": 50 },
+        "cost": { "type": "number" },
+        "actionsTaken": { "type": "string", "maxLength": 2000 },
+        "assigneeName": { "type": "string", "maxLength": 100 },
+        "source": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "title", "description", "category", "floor", "sector", "priority", "status", "createdAt"]
+    },
+    "PreventiveTask": {
+      "title": "PreventiveTask",
+      "description": "Una rutina de mantenimiento preventivo planificada.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "date": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "maxLength": 100 },
+        "floor": { "type": "string", "maxLength": 100 },
+        "frequency": { "type": "string", "maxLength": 50 },
+        "assigneeName": { "type": "string", "maxLength": 100 },
+        "isCompleted": { "type": "boolean" },
+        "completedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "title", "date", "category", "floor", "frequency", "assigneeName", "isCompleted"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Una entrada en el registro de actividad reciente del sistema.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "string", "maxLength": 100 },
+        "statusText": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "type", "title", "description", "timestamp", "statusText", "category"]
+    },
+    "EddieMemory": {
+      "title": "EddieMemory",
+      "description": "Interacciones aprendidas por Eddie AI y diálogos enseñados.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "triggerQuery": { "type": "string", "maxLength": 500 },
+        "responsePattern": { "type": "string", "maxLength": 4000 },
+        "learnedFrom": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "timesUsed": { "type": "number" },
+        "isCustomDialogue": { "type": "boolean" }
+      },
+      "required": ["id", "triggerQuery", "responsePattern", "learnedFrom", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Un mensaje individual en una conversación guardada.",
+      "type": "object",
+      "properties": {
+        "sender": { "type": "string", "maxLength": 50 },
+        "text": { "type": "string", "maxLength": 4000 },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["sender", "text", "timestamp"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "Una sesión de conversación antigua guardada en el sistema para memoria histórica.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userEmail": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 200 },
+        "updatedAt": { "type": "string", "maxLength": 50 },
+        "messagesCount": { "type": "number" }
+      },
+      "required": ["id", "userEmail", "title", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "approved_workers/{email}": {
+      "schema": "UserProfile",
+      "description": "Collection storing profiles of approved office and maintenance staff."
+    },
+    "pending_workers/{email}": {
+      "schema": "UserProfile",
+      "description": "Collection storing profiles of registered staff awaiting admin approval."
+    },
+    "incidents/{incidentId}": {
+      "schema": "Incident",
+      "description": "Collection storing all active and historical incidents registered in the system."
+    },
+    "preventive_tasks/{taskId}": {
+      "schema": "PreventiveTask",
+      "description": "Collection storing routine maintenance and check-up scheduling tasks."
+    },
+    "activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Recent activity logs showing system modifications and administrative actions."
+    },
+    "eddie_memories/{memoryId}": {
+      "schema": "EddieMemory",
+      "description": "Collection for conversation patterns, custom dialogs, and answers taught to Eddie."
+    },
+    "chats/{chatId}": {
+      "schema": "ChatSession",
+      "description": "Collection tracking user chat sessions for old conversation memory."
+    }
+  }
+}
