@@ -1,6 +1,0 @@
-{
-  "firestore": {
-    "database": "ai-studio-mantenimientocit-d027a93b-86cc-413d-bb87-f5af88fec8af",
-    "rules": "firestore.rules"
-  }
-}

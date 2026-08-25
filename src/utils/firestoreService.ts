@@ -1,18 +1,6 @@
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot,
-  query,
-  limit,
-  orderBy
-} from 'firebase/firestore';
-import { db } from '../firebase';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { supabase } from '../supabase';
 import { Incident, PreventiveTask, Activity, UserProfile } from '../types';
-import { INITIAL_INCIDENTS, INITIAL_PREVENTIVE_TASKS, INITIAL_ACTIVITIES } from '../data';
 
 export enum OperationType {
   CREATE = 'create',
@@ -27,20 +15,9 @@ export interface FirestoreErrorInfo {
   error: string;
   operationType: OperationType;
   path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  };
+  authInfo: Record<string, unknown>;
 }
 
-// Custom Eddie memory types
 export interface EddieMemory {
   id: string;
   triggerQuery: string;
@@ -71,275 +48,148 @@ export interface MaintenanceSettings {
   updatedAt?: string;
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {},
-    operationType,
-    path
-  };
-  console.error('Firestore Error Details: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+type TableName = 'incidents' | 'preventive_tasks' | 'activities' | 'approved_workers' | 'pending_workers' | 'eddie_memories' | 'chats';
+type Row = { id: string; data: Record<string, unknown> };
+
+function throwSupabaseError(error: unknown, operationType: OperationType, path: string): never {
+  const message = error instanceof Error ? error.message : JSON.stringify(error);
+  throw new Error(JSON.stringify({ error: message, operationType, path, authInfo: {} }));
 }
 
-/**
- * Seed initial mock data if database is empty on boot
- */
+async function listTable<T>(table: TableName): Promise<T[]> {
+  const { data, error } = await supabase.from(table).select('id,data');
+  if (error) throwSupabaseError(error, OperationType.GET, table);
+  return (data || []).map(row => (row as Row).data as T);
+}
+
+function subscribeTable<T>(table: TableName, callback: (items: T[]) => void): () => void {
+  const channel = supabase
+    .channel(`${table}-sync`)
+    .on('postgres_changes', { event: '*', schema: 'public', table }, async () => {
+      callback(await listTable<T>(table));
+    })
+    .subscribe();
+
+  void listTable<T>(table).then(callback).catch(error => console.error(`Error cargando ${table}:`, error));
+  return () => stopSubscription(channel);
+}
+
+function stopSubscription(channel: RealtimeChannel) {
+  void supabase.removeChannel(channel);
+}
+
+async function saveRow(table: TableName, id: string, data: Record<string, unknown>) {
+  const { error } = await supabase.from(table).upsert({ id, data }, { onConflict: 'id' });
+  if (error) throwSupabaseError(error, OperationType.WRITE, `${table}/${id}`);
+}
+
+async function deleteRow(table: TableName, id: string) {
+  const { error } = await supabase.from(table).delete().eq('id', id);
+  if (error) throwSupabaseError(error, OperationType.DELETE, `${table}/${id}`);
+}
+
 export async function seedInitialDataIfEmpty() {
-  try {
-    // 1. Incidents
-    const incSnapshot = await getDocs(collection(db, 'incidents'));
-    if (incSnapshot.empty) {
-      console.log('Seeding initial incidents...');
-      for (const inc of INITIAL_INCIDENTS) {
-        await setDoc(doc(db, 'incidents', inc.id), inc);
-      }
-    }
-
-    // 2. Preventive Tasks
-    const prevSnapshot = await getDocs(collection(db, 'preventive_tasks'));
-    if (prevSnapshot.empty) {
-      console.log('Seeding initial preventive tasks...');
-      for (const task of INITIAL_PREVENTIVE_TASKS) {
-        await setDoc(doc(db, 'preventive_tasks', task.id), task);
-      }
-    }
-
-    // 3. Activities
-    const actSnapshot = await getDocs(collection(db, 'activities'));
-    if (actSnapshot.empty) {
-      console.log('Seeding initial activities...');
-      for (const act of INITIAL_ACTIVITIES) {
-        await setDoc(doc(db, 'activities', act.id), act);
-      }
-    }
-
-  } catch (error) {
-    console.error('Error during Firestore seeding:', error);
-  }
+  // Data is created only by real users or administrators. No automatic seed data.
 }
-
-// --- SUBSCRIPTIONS FOR REAL-TIME SYNC ---
 
 export function subscribeIncidents(callback: (incidents: Incident[]) => void) {
-  return onSnapshot(collection(db, 'incidents'), (snapshot) => {
-    const list: Incident[] = [];
-    snapshot.forEach((doc) => {
-      list.push(doc.data() as Incident);
-    });
-    callback(list);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'incidents');
-  });
+  return subscribeTable<Incident>('incidents', callback);
 }
 
 export function subscribePreventiveTasks(callback: (tasks: PreventiveTask[]) => void) {
-  return onSnapshot(collection(db, 'preventive_tasks'), (snapshot) => {
-    const list: PreventiveTask[] = [];
-    snapshot.forEach((doc) => {
-      list.push(doc.data() as PreventiveTask);
-    });
-    callback(list);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'preventive_tasks');
-  });
+  return subscribeTable<PreventiveTask>('preventive_tasks', callback);
 }
 
 export function subscribeActivities(callback: (activities: Activity[]) => void) {
-  return onSnapshot(collection(db, 'activities'), (snapshot) => {
-    const list: Activity[] = [];
-    snapshot.forEach((doc) => {
-      list.push(doc.data() as Activity);
-    });
-    callback(list);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'activities');
-  });
+  return subscribeTable<Activity>('activities', callback);
 }
 
 export function subscribeApprovedWorkers(callback: (workers: UserProfile[]) => void) {
-  return onSnapshot(collection(db, 'approved_workers'), (snapshot) => {
-    const list: UserProfile[] = [];
-    snapshot.forEach((doc) => {
-      list.push(doc.data() as UserProfile);
-    });
-    callback(list);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'approved_workers');
-  });
+  return subscribeTable<UserProfile>('approved_workers', callback);
 }
 
 export function subscribePendingWorkers(callback: (workers: UserProfile[]) => void) {
-  return onSnapshot(collection(db, 'pending_workers'), (snapshot) => {
-    const list: UserProfile[] = [];
-    snapshot.forEach((doc) => {
-      list.push(doc.data() as UserProfile);
-    });
-    callback(list);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'pending_workers');
-  });
+  return subscribeTable<UserProfile>('pending_workers', callback);
 }
 
 export function subscribeMaintenanceSettings(callback: (settings: MaintenanceSettings) => void) {
-  return onSnapshot(doc(db, 'app_settings', 'maintenance'), (snapshot) => {
-    callback(snapshot.exists() ? snapshot.data() as MaintenanceSettings : { enabled: false, message: '' });
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'app_settings/maintenance');
-  });
+  const channel = supabase
+    .channel('maintenance-settings-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'id=eq.maintenance' }, async () => {
+      const { data, error } = await supabase.from('app_settings').select('data').eq('id', 'maintenance').maybeSingle();
+      if (!error && data) callback(data.data as MaintenanceSettings);
+    })
+    .subscribe();
+
+  void supabase.from('app_settings').select('data').eq('id', 'maintenance').maybeSingle()
+    .then(({ data, error }) => {
+      if (error) console.error('Error cargando configuración de mantenimiento:', error);
+      callback((data?.data as MaintenanceSettings) || { enabled: false, message: '' });
+    });
+  return () => stopSubscription(channel);
 }
 
 export async function saveMaintenanceSettings(settings: MaintenanceSettings) {
-  const path = 'app_settings/maintenance';
-  try {
-    await setDoc(doc(db, 'app_settings', 'maintenance'), settings, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  const { error } = await supabase.from('app_settings').upsert({ id: 'maintenance', data: settings }, { onConflict: 'id' });
+  if (error) throwSupabaseError(error, OperationType.WRITE, 'app_settings/maintenance');
 }
 
-// --- MUTATION WRAPPERS ---
-
-export async function saveIncident(incident: Incident) {
-  const path = `incidents/${incident.id}`;
-  try {
-    await setDoc(doc(db, 'incidents', incident.id), incident);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+export function unsubscribe(channel: RealtimeChannel) {
+  stopSubscription(channel);
 }
 
-export async function deleteIncident(id: string) {
-  const path = `incidents/${id}`;
-  try {
-    await deleteDoc(doc(db, 'incidents', id));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
+export const saveIncident = (incident: Incident) => saveRow('incidents', incident.id, incident as unknown as Record<string, unknown>);
+export const deleteIncident = (id: string) => deleteRow('incidents', id);
+export const savePreventiveTask = (task: PreventiveTask) => saveRow('preventive_tasks', task.id, task as unknown as Record<string, unknown>);
+export const saveActivity = (activity: Activity) => saveRow('activities', activity.id, activity as unknown as Record<string, unknown>);
+
+export function saveApprovedWorker(worker: UserProfile) {
+  return saveRow('approved_workers', worker.email.toLowerCase(), worker as unknown as Record<string, unknown>);
 }
 
-export async function savePreventiveTask(task: PreventiveTask) {
-  const path = `preventive_tasks/${task.id}`;
-  try {
-    await setDoc(doc(db, 'preventive_tasks', task.id), task);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+export function deleteApprovedWorker(email: string) {
+  return deleteRow('approved_workers', email.toLowerCase());
 }
 
-export async function saveActivity(activity: Activity) {
-  const path = `activities/${activity.id}`;
-  try {
-    await setDoc(doc(db, 'activities', activity.id), activity);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+export function savePendingWorker(worker: UserProfile) {
+  return saveRow('pending_workers', worker.email.toLowerCase(), worker as unknown as Record<string, unknown>);
 }
 
-export async function saveApprovedWorker(worker: UserProfile) {
-  const emailLower = worker.email.toLowerCase();
-  const path = `approved_workers/${emailLower}`;
-  try {
-    await setDoc(doc(db, 'approved_workers', emailLower), worker);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+export function deletePendingWorker(email: string) {
+  return deleteRow('pending_workers', email.toLowerCase());
 }
-
-export async function deleteApprovedWorker(email: string) {
-  const emailLower = email.toLowerCase();
-  const path = `approved_workers/${emailLower}`;
-  try {
-    await deleteDoc(doc(db, 'approved_workers', emailLower));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
-}
-
-export async function savePendingWorker(worker: UserProfile) {
-  const emailLower = worker.email.toLowerCase();
-  const path = `pending_workers/${emailLower}`;
-  try {
-    await setDoc(doc(db, 'pending_workers', emailLower), worker);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
-}
-
-export async function deletePendingWorker(email: string) {
-  const emailLower = email.toLowerCase();
-  const path = `pending_workers/${emailLower}`;
-  try {
-    await deleteDoc(doc(db, 'pending_workers', emailLower));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
-  }
-}
-
-// --- EDDIE MEMORIES & LEARNED DIALOGUES ---
 
 export async function getEddieMemories(): Promise<EddieMemory[]> {
-  try {
-    const snap = await getDocs(collection(db, 'eddie_memories'));
-    const list: EddieMemory[] = [];
-    snap.forEach((doc) => {
-      list.push(doc.data() as EddieMemory);
-    });
-    return list;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, 'eddie_memories');
-    return [];
-  }
+  const { data, error } = await supabase.from('eddie_memories').select('id,data');
+  if (error) throwSupabaseError(error, OperationType.GET, 'eddie_memories');
+  return (data || []).map(row => (row as Row).data as unknown as EddieMemory);
 }
 
 export async function learnEddieMemory(triggerQuery: string, responsePattern: string, learnedFrom: string, isCustomDialogue = false) {
-  const cleanTrigger = triggerQuery.toLowerCase().trim();
-  const id = `MEM-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const path = `eddie_memories/${id}`;
-  
   const memory: EddieMemory = {
-    id,
-    triggerQuery: cleanTrigger,
+    id: `MEM-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    triggerQuery: triggerQuery.toLowerCase().trim(),
     responsePattern,
     learnedFrom,
     createdAt: new Date().toISOString(),
     timesUsed: 0,
     isCustomDialogue
   };
-
-  try {
-    await setDoc(doc(db, 'eddie_memories', id), memory);
-    console.log(`Eddie learned new pattern for query: "${triggerQuery}"`);
-    return memory;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await saveRow('eddie_memories', memory.id, memory as unknown as Record<string, unknown>);
+  return memory;
 }
 
-// --- CHAT SESSIONS & HISTORICAL CHATS ---
-
 export async function saveChatSession(session: ChatSession) {
-  const path = `chats/${session.id}`;
-  try {
-    await setDoc(doc(db, 'chats', session.id), session);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+  await saveRow('chats', session.id, session as unknown as Record<string, unknown>);
 }
 
 export async function getChatSessions(userEmail: string): Promise<ChatSession[]> {
-  try {
-    const snap = await getDocs(collection(db, 'chats'));
-    const list: ChatSession[] = [];
-    snap.forEach((doc) => {
-      const data = doc.data() as ChatSession;
-      if (data.userEmail.toLowerCase() === userEmail.toLowerCase()) {
-        list.push(data);
-      }
-    });
-    return list;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, 'chats');
-    return [];
-  }
+  const { data, error } = await supabase.from('chats').select('id,data');
+  if (error) throwSupabaseError(error, OperationType.GET, 'chats');
+  return (data || []).map(row => (row as Row).data as unknown as ChatSession)
+    .filter(session => session.userEmail.toLowerCase() === userEmail.toLowerCase());
+}
+
+export async function deleteChatSession(sessionId: string) {
+  await deleteRow('chats', sessionId);
 }

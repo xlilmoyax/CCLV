@@ -27,10 +27,9 @@ import {
   learnEddieMemory, 
   getChatSessions, 
   saveChatSession,
-  EddieMemory
+  EddieMemory,
+  deleteChatSession
 } from '../utils/firestoreService';
-import { doc, deleteDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -365,7 +364,7 @@ export default function SoporteView({
       const email = userProfile?.email || 'anon';
       
       try {
-        await deleteDoc(doc(db, 'chats', sessionId));
+        await deleteChatSession(sessionId);
       } catch (err) {
         console.error("Error deleting chat session from Firestore:", err);
       }
