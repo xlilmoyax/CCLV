@@ -65,6 +65,12 @@ export interface ChatSession {
   messages: ChatMessage[];
 }
 
+export interface MaintenanceSettings {
+  enabled: boolean;
+  message: string;
+  updatedAt?: string;
+}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
@@ -214,6 +220,23 @@ export function subscribePendingWorkers(callback: (workers: UserProfile[]) => vo
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, 'pending_workers');
   });
+}
+
+export function subscribeMaintenanceSettings(callback: (settings: MaintenanceSettings) => void) {
+  return onSnapshot(doc(db, 'app_settings', 'maintenance'), (snapshot) => {
+    callback(snapshot.exists() ? snapshot.data() as MaintenanceSettings : { enabled: false, message: '' });
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, 'app_settings/maintenance');
+  });
+}
+
+export async function saveMaintenanceSettings(settings: MaintenanceSettings) {
+  const path = 'app_settings/maintenance';
+  try {
+    await setDoc(doc(db, 'app_settings', 'maintenance'), settings, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
 }
 
 // --- MUTATION WRAPPERS ---

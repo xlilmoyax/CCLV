@@ -23,6 +23,11 @@ service cloud.firestore {
       allow write: if email is string && email.size() <= 100;
     }
 
+    match /app_settings/{settingId} {
+      allow read: if true;
+      allow write: if isValidId(settingId);
+    }
+
     match /incidents/{incidentId} {
       allow read: if true;
       allow write: if isValidId(incidentId);

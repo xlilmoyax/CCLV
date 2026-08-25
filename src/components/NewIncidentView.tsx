@@ -19,7 +19,7 @@ import { Incident, PriorityType, StatusType } from '../types';
 import { FLOORS, CATEGORIES, SECTOR_MAP } from '../data';
 
 interface NewIncidentViewProps {
-  onAddIncident: (incident: Omit<Incident, 'id' | 'timestamp' | 'createdAt' | 'completedAt'>) => void;
+  onAddIncident: (incident: Omit<Incident, 'id' | 'timestamp' | 'createdAt' | 'completedAt'>) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -29,6 +29,7 @@ export default function NewIncidentView({
 }: NewIncidentViewProps) {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form states
   const [category, setCategory] = useState('');
@@ -87,23 +88,29 @@ export default function NewIncidentView({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Add incident
-    onAddIncident({
-      title: title,
-      description: description || 'No se proporcionó descripción detallada.',
-      category: category,
-      floor: floor,
-      sector: sector,
-      priority: priority,
-      status: 'Pendiente',
-      imageUrl: attachedFile?.url || undefined
-    });
+    if (isSubmitting) return;
 
-    // Display modal
-    setShowSuccessModal(true);
+    setIsSubmitting(true);
+    try {
+      await onAddIncident({
+        title,
+        description: description || 'No se proporcionó descripción detallada.',
+        category,
+        floor,
+        sector,
+        priority,
+        status: 'Pendiente',
+        imageUrl: attachedFile?.url || undefined
+      });
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error('Error al guardar la incidencia:', error);
+      alert('No se pudo guardar la incidencia. Verifique la conexión con el sistema e intente nuevamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Get progress bar width
@@ -408,11 +415,12 @@ export default function NewIncidentView({
               </button>
               <button
                 type="submit"
-                className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-lg text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition-all shadow-sm"
+                disabled={isSubmitting}
+                className="bg-primary hover:bg-primary-hover disabled:opacity-60 disabled:cursor-wait text-white px-8 py-3 rounded-lg text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition-all shadow-sm"
                 id="btn-submit-incident"
               >
                 <Send size={16} />
-                <span>Enviar Reporte</span>
+                <span>{isSubmitting ? 'Guardando...' : 'Enviar Reporte'}</span>
               </button>
             </div>
           </motion.div>
