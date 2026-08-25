@@ -114,47 +114,6 @@ export async function seedInitialDataIfEmpty() {
       }
     }
 
-    // 4. Approved Workers
-    const approvedSnapshot = await getDocs(collection(db, 'approved_workers'));
-    if (approvedSnapshot.empty) {
-      console.log('Seeding initial approved workers...');
-      const defaultWorker: UserProfile = {
-        name: 'Carlos Martínez',
-        document: '35.912.045',
-        phone: '3764-551122',
-        email: 'carlos.martinez@oficina.com',
-        office: 'Jóvenes',
-        isApproved: true
-      };
-      await setDoc(doc(db, 'approved_workers', defaultWorker.email.toLowerCase()), defaultWorker);
-    }
-
-    // 5. Pending Workers
-    const pendingSnapshot = await getDocs(collection(db, 'pending_workers'));
-    if (pendingSnapshot.empty) {
-      console.log('Seeding initial pending workers...');
-      const defaultPendings: UserProfile[] = [
-        {
-          name: 'Roberto Gómez',
-          document: '38.452.193',
-          phone: '3764-981244',
-          email: 'roberto.gomez@oficina.com',
-          office: 'Misiones',
-          isApproved: false
-        },
-        {
-          name: 'Lucía Benítez',
-          document: '40.129.852',
-          phone: '3764-152288',
-          email: 'lucia.benitez@oficina.com',
-          office: 'Kinectika',
-          isApproved: false
-        }
-      ];
-      for (const p of defaultPendings) {
-        await setDoc(doc(db, 'pending_workers', p.email.toLowerCase()), p);
-      }
-    }
   } catch (error) {
     console.error('Error during Firestore seeding:', error);
   }

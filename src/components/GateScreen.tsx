@@ -68,52 +68,6 @@ export function GateScreen({
   const [googleSyncedEmail, setGoogleSyncedEmail] = useState('');
   const [googleSyncedName, setGoogleSyncedName] = useState('');
 
-  // Handler for when user selects an account in our Google popup
-  const handleSelectGoogleAccount = async (email: string, name: string) => {
-    setIsGoogleLoading(true);
-    setGoogleLoadingMsg('Validando credenciales con los servidores de Google...');
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setGoogleLoadingMsg('Sincronizando información de perfil...');
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const emailLower = email.toLowerCase().trim();
-
-    // Check if user is already registered in approved or pending lists
-    const foundApproved = approvedWorkers.find(
-      u => u.email.toLowerCase().trim() === emailLower
-    );
-    const foundPending = pendingWorkers.find(
-      u => u.email.toLowerCase().trim() === emailLower
-    );
-    const foundUser = foundApproved || foundPending;
-
-    if (foundUser) {
-      // Direct login!
-      setGoogleLoadingMsg(`¡Bienvenido de vuelta, ${foundUser.name}! Iniciando sesión...`);
-      await new Promise(resolve => setTimeout(resolve, 600));
-      setIsGoogleLoading(false);
-      setShowGoogleModal(false);
-      onLogin(foundUser);
-    } else {
-      // User is not registered yet. Autofill form and switch tab to Register
-      setGoogleLoadingMsg('Autenticación de Google exitosa. Vinculando datos...');
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Pre-fill fields
-      setRegEmail(emailLower);
-      setRegName(name);
-      setRegPassword('GoogleLinkedSecureAuth123!'); // Autofill dummy/token password
-      setGoogleSyncedEmail(emailLower);
-      setGoogleSyncedName(name);
-      
-      setIsGoogleLoading(false);
-      setShowGoogleModal(false);
-      setActiveMode('register');
-      setRegError('');
-    }
-  };
-
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -153,38 +107,12 @@ export function GateScreen({
           return;
         }
       } else {
-        // Legacy seed user fallback (using '123456' or administration password as default password)
-        if (loginPassword === '123456' || loginPassword === 'administracionpreventiva') {
-          // Auto-migrate to secure hash on login for security!
-          const secureHash = await hashPassword(loginPassword);
-          const migratedUser = { ...foundUser, passwordHash: secureHash };
-          onLogin(migratedUser);
-          return;
-        } else {
-          setLoginError('Contraseña incorrecta. Ingrese su contraseña registrada (o "123456" si es un usuario preexistente).');
-          return;
-        }
+        setLoginError('Esta cuenta no tiene una contraseña válida registrada. Solicite a administración que revise su cuenta.');
+        return;
       }
     }
 
-    // 3. Fallback / Default admin email bypass
-    if (loginPassword.trim() === 'administracionpreventiva') {
-      // Dynamic admin login
-      const adminProfile: UserProfile = {
-        name: 'Administrador de Guardia',
-        document: '99.999.999',
-        phone: '3764-000000',
-        email: emailLower,
-        office: 'Administración',
-        isAdmin: true,
-        isApproved: true,
-        passwordHash: await hashPassword('administracionpreventiva')
-      };
-      onLogin(adminProfile);
-      return;
-    }
-
-    setLoginError('El correo ingresado no está registrado o la contraseña es inválida. Si se acaba de registrar, espere la aprobación de un administrador.');
+    setLoginError('El correo no está registrado o la contraseña es inválida. Solicite un registro manual y aprobación administrativa.');
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -491,7 +419,7 @@ export function GateScreen({
 
                 <button
                   type="button"
-                  onClick={() => setShowGoogleModal(true)}
+                  onClick={() => setLoginError('El ingreso debe realizarse con una cuenta registrada y aprobada por administración.')}
                   className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/85 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-3xs cursor-pointer active:scale-99"
                 >
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -500,7 +428,7 @@ export function GateScreen({
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
                   </svg>
-                  <span>Continuar con Google</span>
+                  <span>Ingreso con cuenta registrada</span>
                 </button>
               </motion.form>
             ) : (
@@ -726,7 +654,7 @@ export function GateScreen({
 
                     <button
                       type="button"
-                      onClick={() => setShowGoogleModal(true)}
+                      onClick={() => setRegError('El registro es manual. Complete sus datos reales y envíe la solicitud para aprobación.')}
                       className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/85 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-3xs cursor-pointer active:scale-99"
                     >
                       <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -735,7 +663,7 @@ export function GateScreen({
                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
                       </svg>
-                      <span>Vincular cuenta de Google</span>
+                      <span>Registro manual obligatorio</span>
                     </button>
                   </>
                 )}
@@ -799,7 +727,7 @@ export function GateScreen({
                       {/* suggested personalized account based on metadata! */}
                       <button
                         type="button"
-                        onClick={() => handleSelectGoogleAccount('matymoya18@gmail.com', 'Matías Moya')}
+                        onClick={() => setRegError('El registro es manual. No se aceptan identidades simuladas o cuentas no verificadas.')}
                         className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 border border-slate-200 rounded-xl transition-all text-left group cursor-pointer"
                       >
                         <div className="w-8.5 h-8.5 rounded-full bg-gradient-to-tr from-[#7a172c] to-[#9e1b34] text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
@@ -869,7 +797,8 @@ export function GateScreen({
                               alert('Por favor ingresa tu nombre y correo.');
                               return;
                             }
-                            handleSelectGoogleAccount(googleCustomEmail, googleCustomName);
+                            setRegError('El registro es manual. No se aceptan identidades simuladas o cuentas no verificadas.');
+                            setShowGoogleModal(false);
                           }}
                           className="flex-grow py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
                         >

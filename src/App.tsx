@@ -83,38 +83,12 @@ export default function App() {
 
   // Pending Workers for Approval list
   const [pendingWorkers, setPendingWorkers] = useState<UserProfile[]>(() => {
-    return secureLoad<UserProfile[]>('pending_workers_list', [
-      {
-        name: 'Roberto Gómez',
-        document: '38.452.193',
-        phone: '3764-981244',
-        email: 'roberto.gomez@oficina.com',
-        office: 'Misiones',
-        isApproved: false
-      },
-      {
-        name: 'Lucía Benítez',
-        document: '40.129.852',
-        phone: '3764-152288',
-        email: 'lucia.benitez@oficina.com',
-        office: 'Kinectika',
-        isApproved: false
-      }
-    ]);
+    return [];
   });
 
   // Approved Workers list
   const [approvedWorkers, setApprovedWorkers] = useState<UserProfile[]>(() => {
-    return secureLoad<UserProfile[]>('approved_workers_list', [
-      {
-        name: 'Carlos Martínez',
-        document: '35.912.045',
-        phone: '3764-551122',
-        email: 'carlos.martinez@oficina.com',
-        office: 'Jóvenes',
-        isApproved: true
-      }
-    ]);
+    return [];
   });
 
   // Admin staff account management states
@@ -484,12 +458,13 @@ export default function App() {
           await saveActivity(newAct);
         }}
         onRegisterAdmin={async (newAdmin) => {
-          await saveApprovedWorker(newAdmin);
-          setUserProfile(newAdmin);
+          const pendingAdmin = { ...newAdmin, isAdmin: true, isApproved: false };
+          await savePendingWorker(pendingAdmin);
+          setUserProfile(pendingAdmin);
           await handleAddActivityLog(
-            'Admin Registrado',
-            `El administrador ${newAdmin.name} se registró e ingresó de forma exitosa.`,
-            'Admin'
+            'Solicitud Administrativa',
+            `La solicitud de rol administrativo de ${newAdmin.name} quedó pendiente de aprobación.`,
+            'Pendiente'
           );
         }}
       />
@@ -514,12 +489,7 @@ export default function App() {
   // Callback: Add newly reported incident
   const handleAddIncident = async (newIncData: Omit<Incident, 'id' | 'timestamp' | 'createdAt' | 'completedAt'>) => {
     // Generate sequential ID
-    const baseNum = 1024;
-    const currentMaxId = incidents.reduce((max, inc) => {
-      const num = parseInt(inc.id.replace('INC-', ''), 10);
-      return isNaN(num) ? max : Math.max(max, num);
-    }, baseNum);
-    const nextId = `INC-${currentMaxId + 1}`;
+    const nextId = `INC-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const now = new Date();
     const Y = now.getFullYear();
@@ -533,7 +503,13 @@ export default function App() {
       ...newIncData,
       id: nextId,
       timestamp: 'Hace 1 min',
-      createdAt: formattedDate
+      createdAt: formattedDate,
+      reportedBy: userProfile ? {
+        name: userProfile.name,
+        email: userProfile.email,
+        phone: userProfile.phone,
+        office: userProfile.office
+      } : undefined
     };
 
     await saveIncident(newIncident);
@@ -550,7 +526,11 @@ export default function App() {
       category: newIncident.category
     };
 
-    await saveActivity(newAct);
+    try {
+      await saveActivity(newAct);
+    } catch (error) {
+      console.error('La incidencia se guardó, pero no se pudo registrar la actividad:', error);
+    }
     setActiveTab('incidencias'); // Redirect to Incidencias list
   };
 
