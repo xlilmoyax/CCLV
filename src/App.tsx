@@ -68,7 +68,10 @@ export default function App() {
 
   // User Profile and Menu states
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
-    return secureLoad<UserProfile | null>('user_profile_data', null);
+    localStorage.removeItem('user_profile_data');
+    localStorage.removeItem('pending_workers_list');
+    localStorage.removeItem('approved_workers_list');
+    return null;
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdminAccessRequested, setIsAdminAccessRequested] = useState(false);
