@@ -72,6 +72,7 @@ export default function App() {
     localStorage.removeItem('approved_workers_list');
     return null;
   });
+  
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAdminAccessRequested, setIsAdminAccessRequested] = useState(false);
 
