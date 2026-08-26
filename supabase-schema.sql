@@ -65,11 +65,19 @@ begin
   end loop;
 end $$;
 
-alter publication supabase_realtime add table public.incidents;
-alter publication supabase_realtime add table public.preventive_tasks;
-alter publication supabase_realtime add table public.activities;
-alter publication supabase_realtime add table public.approved_workers;
-alter publication supabase_realtime add table public.pending_workers;
-alter publication supabase_realtime add table public.eddie_memories;
-alter publication supabase_realtime add table public.chats;
-alter publication supabase_realtime add table public.app_settings;
+do $$
+declare
+  table_name text;
+begin
+  foreach table_name in array array['incidents', 'preventive_tasks', 'activities', 'approved_workers', 'pending_workers', 'eddie_memories', 'chats', 'app_settings'] loop
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = table_name
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', table_name);
+    end if;
+  end loop;
+end $$;
