@@ -40,9 +40,6 @@ import {
   subscribeActivities,
   subscribeApprovedWorkers,
   subscribePendingWorkers,
-  subscribeMaintenanceSettings,
-  saveMaintenanceSettings,
-  MaintenanceSettings,
   saveIncident,
   deleteIncident,
   savePreventiveTask,
@@ -61,7 +58,6 @@ import NewIncidentView from './components/NewIncidentView';
 import NavigationMenuDrawer from './components/NavigationMenuDrawer';
 import { GateScreen, PendingApprovalScreen } from './components/GateScreen';
 import SoporteView from './components/SoporteView';
-import MaintenanceScreen from './components/MaintenanceScreen';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -74,7 +70,6 @@ export default function App() {
     return null;
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAdminAccessRequested, setIsAdminAccessRequested] = useState(false);
 
   // Profile editing states inside the "Más" profile section
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -105,14 +100,7 @@ export default function App() {
   
   // Incidents state with localStorage fallback and auto-restoration of any missing initial incidents
   const [incidents, setIncidents] = useState<Incident[]>(() => {
-    const loaded = secureLoad<Incident[]>('incident_records_v4', INITIAL_INCIDENTS);
-    // If some initial incidents are missing (e.g., due to previous aggressive database maintenance), restore them
-    const loadedIds = new Set(loaded.map(i => i.id));
-    const missing = INITIAL_INCIDENTS.filter(i => !loadedIds.has(i.id));
-    if (missing.length > 0) {
-      return [...loaded, ...missing];
-    }
-    return loaded;
+    return [];
   });
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -120,19 +108,15 @@ export default function App() {
 
   // Preventive tasks state with localStorage fallback
   const [preventiveTasks, setPreventiveTasks] = useState<PreventiveTask[]>(() => {
-    return secureLoad<PreventiveTask[]>('preventive_routines', INITIAL_PREVENTIVE_TASKS);
+    return [];
   });
 
   // Activities state with localStorage fallback
   const [activities, setActivities] = useState<Activity[]>(() => {
-    return secureLoad<Activity[]>('recent_activity_log_v4', INITIAL_ACTIVITIES);
+    return [];
   });
 
   const [isSyncingOneDrive, setIsSyncingOneDrive] = useState(false);
-  const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings>({
-    enabled: false,
-    message: 'Estamos realizando tareas de mantenimiento para mejorar el sistema. Volveremos a estar disponibles en breve.'
-  });
 
   // Synchronize user profile state with localStorage for session persistence
   useEffect(() => {
@@ -176,17 +160,12 @@ export default function App() {
         setPendingWorkers(loaded);
       });
 
-      const unsubMaintenance = subscribeMaintenanceSettings((settings) => {
-        setMaintenanceSettings(prev => ({ ...prev, ...settings }));
-      });
-
       return () => {
         unsubIncidents();
         unsubTasks();
         unsubActivities();
         unsubApproved();
         unsubPending();
-        unsubMaintenance();
       };
     };
 
@@ -199,21 +178,6 @@ export default function App() {
       if (unsubFn) unsubFn();
     };
   }, []);
-
-  const handleMaintenanceChange = async (enabled: boolean) => {
-    const nextSettings = {
-      ...maintenanceSettings,
-      enabled,
-      updatedAt: new Date().toISOString()
-    };
-    setMaintenanceSettings(nextSettings);
-    try {
-      await saveMaintenanceSettings(nextSettings);
-    } catch (error) {
-      setMaintenanceSettings(maintenanceSettings);
-      alert('No se pudo guardar el modo mantenimiento. Verifique la conexión e intente nuevamente.');
-    }
-  };
 
   // Database maintenance / optimization: keeping important data and removing unused stale data
   const runDatabaseMaintenance = () => {
@@ -418,10 +382,6 @@ export default function App() {
     );
   };
 
-  if (maintenanceSettings.enabled && !userProfile && !isAdminAccessRequested) {
-    return <MaintenanceScreen message={maintenanceSettings.message} onAdminAccess={() => setIsAdminAccessRequested(true)} />;
-  }
-
   // Auth portal redirects if no profile or not approved
   if (!userProfile) {
     return (
@@ -461,13 +421,12 @@ export default function App() {
           await saveActivity(newAct);
         }}
         onRegisterAdmin={async (newAdmin) => {
-          const pendingAdmin = { ...newAdmin, isAdmin: true, isApproved: false };
-          await savePendingWorker(pendingAdmin);
-          setUserProfile(pendingAdmin);
+          await saveApprovedWorker(newAdmin);
+          setUserProfile(newAdmin);
           await handleAddActivityLog(
-            'Solicitud Administrativa',
-            `La solicitud de rol administrativo de ${newAdmin.name} quedó pendiente de aprobación.`,
-            'Pendiente'
+            'Admin Registrado',
+            `El administrador ${newAdmin.name} se registró e ingresó de forma exitosa.`,
+            'Admin'
           );
         }}
       />
@@ -485,14 +444,15 @@ export default function App() {
     );
   }
 
-  if (maintenanceSettings.enabled && !userProfile.isAdmin) {
-    return <MaintenanceScreen message={maintenanceSettings.message} />;
-  }
-
   // Callback: Add newly reported incident
   const handleAddIncident = async (newIncData: Omit<Incident, 'id' | 'timestamp' | 'createdAt' | 'completedAt'>) => {
     // Generate sequential ID
-    const nextId = `INC-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const baseNum = 1024;
+    const currentMaxId = incidents.reduce((max, inc) => {
+      const num = parseInt(inc.id.replace('INC-', ''), 10);
+      return isNaN(num) ? max : Math.max(max, num);
+    }, baseNum);
+    const nextId = `INC-${currentMaxId + 1}`;
 
     const now = new Date();
     const Y = now.getFullYear();
@@ -506,17 +466,10 @@ export default function App() {
       ...newIncData,
       id: nextId,
       timestamp: 'Hace 1 min',
-      createdAt: formattedDate,
-      reportedBy: userProfile ? {
-        name: userProfile.name,
-        email: userProfile.email,
-        phone: userProfile.phone,
-        office: userProfile.office
-      } : undefined
+      createdAt: formattedDate
     };
 
     await saveIncident(newIncident);
-    setIncidents(prev => [newIncident, ...prev.filter(incident => incident.id !== newIncident.id)]);
 
     // Create corresponding Activity feed item
     const newAct: Activity = {
@@ -529,11 +482,7 @@ export default function App() {
       category: newIncident.category
     };
 
-    try {
-      await saveActivity(newAct);
-    } catch (error) {
-      console.error('La incidencia se guardó, pero no se pudo registrar la actividad:', error);
-    }
+    await saveActivity(newAct);
     setActiveTab('incidencias'); // Redirect to Incidencias list
   };
 
@@ -1565,25 +1514,6 @@ export default function App() {
                           </div>
 
                           <div className="space-y-3">
-                            <div className={`flex items-center justify-between p-3 rounded-lg border ${maintenanceSettings.enabled ? 'bg-amber-50 border-amber-200' : 'bg-surface-container-low border-outline-variant'}`}>
-                              <div className="flex items-start gap-2.5">
-                                <Wrench size={17} className={maintenanceSettings.enabled ? 'text-amber-600 mt-0.5' : 'text-primary mt-0.5'} />
-                                <div>
-                                  <p className="text-xs font-bold text-on-surface">Modo Mantenimiento</p>
-                                  <p className="text-[10px] text-on-surface-variant mt-0.5">
-                                    {maintenanceSettings.enabled ? 'Los usuarios ven el aviso de mantenimiento.' : 'La aplicación está disponible para los usuarios.'}
-                                  </p>
-                                </div>
-                              </div>
-                              <input
-                                type="checkbox"
-                                checked={maintenanceSettings.enabled}
-                                onChange={e => handleMaintenanceChange(e.target.checked)}
-                                aria-label="Activar modo mantenimiento"
-                                className="h-4 w-4 text-primary focus:ring-primary rounded cursor-pointer"
-                              />
-                            </div>
-
                             <div className="flex items-center justify-between p-3 bg-surface-container-low rounded-lg border border-outline-variant">
                               <div>
                                 <p className="text-xs font-bold text-on-surface">Notificaciones por Correo</p>
