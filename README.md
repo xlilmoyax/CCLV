@@ -21,16 +21,4 @@ View your app in AI Studio: https://ai.studio/apps/d027a93b-86cc-413d-bb87-f5af8
 5. Run the app:
    `npm run dev`
 
-The app uses Supabase for incidents, staff, activities, maintenance settings, Eddie memories, and chat history. Firebase is no longer used by the web source.
-
-## Deploy on Google Cloud Run
-
-Install the Google Cloud CLI, authenticate with the Google account that owns the target project, and run:
-
-```powershell
-gcloud auth login
-gcloud config set project YOUR_GOOGLE_CLOUD_PROJECT_ID
-gcloud run deploy mantenimiento-cita --source . --region us-central1 --allow-unauthenticated
-```
-
-When prompted, configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as build-time variables or deploy from a CI environment that provides them. Cloud Run will print the public HTTPS URL after deployment.
+The app uses Supabase for incidents, staff, activities, maintenance settings, Eddie memories, and chat history. Firebase and Google Cloud are not used by the web source.
