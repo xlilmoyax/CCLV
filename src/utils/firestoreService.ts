@@ -64,11 +64,11 @@ async function listTable<T>(table: TableName): Promise<T[]> {
 
 function subscribeTable<T>(table: TableName, callback: (items: T[]) => void): () => void {
   const channel = supabase
-    .channel(`${table}-sync`)
+    .channel(`${table}-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
     .on('postgres_changes', { event: '*', schema: 'public', table }, async () => {
       callback(await listTable<T>(table));
-    })
-    .subscribe();
+    });
+  channel.subscribe();
 
   void listTable<T>(table).then(callback).catch(error => console.error(`Error cargando ${table}:`, error));
   return () => stopSubscription(channel);
@@ -114,12 +114,12 @@ export function subscribePendingWorkers(callback: (workers: UserProfile[]) => vo
 
 export function subscribeMaintenanceSettings(callback: (settings: MaintenanceSettings) => void) {
   const channel = supabase
-    .channel('maintenance-settings-sync')
+    .channel(`maintenance-settings-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: 'id=eq.maintenance' }, async () => {
       const { data, error } = await supabase.from('app_settings').select('data').eq('id', 'maintenance').maybeSingle();
       if (!error && data) callback(data.data as MaintenanceSettings);
-    })
-    .subscribe();
+    });
+  channel.subscribe();
 
   void supabase.from('app_settings').select('data').eq('id', 'maintenance').maybeSingle()
     .then(({ data, error }) => {
