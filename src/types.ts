@@ -13,6 +13,7 @@ export interface PreventiveTask {
   status: 'Programada' | 'Vencida' | 'Completada';
 }
 
+
 export interface Activity {
   id: string;
   type: 'new_incident' | 'task_completed' | 'status_update';
